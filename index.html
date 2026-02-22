@@ -466,9 +466,9 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
 
 </div></div><script>
 
-    const SUPABASE_URL = 'https://wcjpptcrcaxmiyltcirz.supabase.co ' ;
-
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndjanBwdGNyY2F4bWl5bHRjaXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE3NTE5MTksImV4cCI6MjA4NzMyNzkxOX0.-OOJoGa1h27eLotTvDmgnFrpLtmlRkNU8dmZgOB7v0E ' ;
+    
+    const SUPABASE_URL = 'https://wcjpptcrcaxmiyltcirz.supabase.co'; 
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndjanBwdGNyY2F4bWl5bHRjaXJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE3NTE5MTksImV4cCI6MjA4NzMyNzkxOX0.-OOJoGa1h27eLotTvDmgnFrpLtmlRkNU8dmZgOB7v0E';
 
     const MEDIA_BUCKET_NAME = 'CHAT_MEDIA'; let supabaseClient;
 
@@ -478,7 +478,7 @@ try { supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); }
 
 let appSettings = { 
 
-    deleteSeconds: 7, inactivityTimeout: 120, entranceCode: "مرحب٩", 
+    deleteSeconds: 7, inactivityTimeout: 120, entranceCode: "نور١سامي", 
 
     timerEnabled: true, inactivityEnabled: true, adminCode: "2023" 
 
@@ -748,13 +748,22 @@ function setupPresenceAndTyping() {
 
         });
 
-    document.getElementById('msg-input').addEventListener('input', () => {
+    const handleTyping = () => {
+    if(presenceChannel) {
+        presenceChannel.send({
+            type: 'broadcast',
+            event: 'typing',
+            payload: { user: username },
+            config: { method: 'http' } // هذا هو البديل الصحيح والآمن حالياً
+        });
+    }
+    resetInactivityTimer();
+};
 
-        if(presenceChannel) presenceChannel.send({ type: 'broadcast', event: 'typing', payload: { user: username } });
 
-        resetInactivityTimer();
+document.getElementById('msg-input').addEventListener('input', handleTyping);
+document.getElementById('private-msg-input').addEventListener('input', handleTyping);
 
-    });
 
     document.getElementById('private-msg-input').addEventListener('input', () => {
 
@@ -1150,32 +1159,22 @@ async function sendMessage(content, type = 'text', finalContent = null) {
 
 }
 
-
-
 function startMessageListener() {
+    if (!supabaseClient) return;
 
-    if(!supabaseClient) return;
-
-    supabaseClient.channel('public:messages') 
-
+    // استماع للرسائل العامة
+    supabaseClient.channel('public-room')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-
-            const { sender_name, content, type, color, id } = payload.new;
-
-            appendMessageToUI(sender_name, content, type, color, sender_name === username, false, id, false);
-
+            appendMessageToUI(payload.new.sender_name, payload.new.content, payload.new.type, payload.new.color, payload.new.sender_name === username, false, payload.new.id, false);
         })
-
-        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
-
-           const el = document.getElementById(`msg-${payload.old.id}`);
-
-           if(el) el.remove();
-
-        })
-
         .subscribe();
 
+    // استماع للرسائل الخاصة
+    supabaseClient.channel('private-room')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'private_messages' }, (payload) => {
+            appendMessageToUI(payload.new.sender_name, payload.new.content, payload.new.type, payload.new.color, payload.new.sender_name === username, false, payload.new.id, true);
+        })
+        .subscribe();
 }
 
 
@@ -1232,97 +1231,60 @@ function startPrivateMessageListener() {
 
 
 
-function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgId, preventDeletion = false) {
-
-    const targetBox = (preventDeletion || currentChatTarget === 'private') && document.getElementById('private-chat-box') ? document.getElementById('private-chat-box') : document.getElementById('chat-box');
-
-    const chatBox = targetBox || document.getElementById('chat-box');
+function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgId, isPrivate = false) {
+    // اختيار الصندوق الصحيح بناءً على نوع الرسالة
+    const targetBoxId = isPrivate ? 'private-chat-box' : 'chat-box';
+    const chatBox = document.getElementById(targetBoxId);
+    
+    if (!chatBox) return;
 
     const msgDiv = document.createElement('div');
-
     msgDiv.className = 'message';
-
-    if(msgId) msgDiv.id = `${preventDeletion ? 'msg-private-' : 'msg-'}${msgId}`;
-
+    msgDiv.id = (isPrivate ? 'msg-private-' : 'msg-') + msgId;
     
-
     msgDiv.style.alignSelf = isMine ? 'flex-end' : 'flex-start';
-
     if(type === 'sticker') msgDiv.classList.add('sticker-msg');
-
     else {
-
         msgDiv.style.background = isMine ? '#007bff' : '#2a2a2a';
-
         msgDiv.style.borderRadius = isMine ? '15px 15px 0 15px' : '15px 15px 15px 0';
-
     }
-
-
 
     let innerHTML = '';
-
     if(type !== 'sticker') innerHTML += `<div class="message-sender" style="color:${color}">${sender}</div>`;
-
-
-
     if (type === 'text') innerHTML += `<div>${content}</div>`;
-
     else if (type === 'image') innerHTML += `<img src="${content}" onload="scrollToBottom()">`;
-
     else if (type === 'video') innerHTML += `<video controls src="${content}" style="max-height:300px;"></video>`;
-
     else if (type === 'audio') innerHTML += `<audio controls src="${content}"></audio>`;
-
     else if (type === 'sticker') innerHTML += `<img src="${content}" class="sticker-img" onload="scrollToBottom()">`;
 
-
-
     msgDiv.innerHTML = innerHTML;
-
-
-
-    // only apply auto-delete timer for public messages when timer is enabled and not history
-
-    if (appSettings.timerEnabled && !isHistory && !preventDeletion && !msgDiv.id.startsWith('msg-private-')) {
-
-        const timerBar = document.createElement('div');
-
-        timerBar.className = 'timer-bar';
-
-        timerBar.style.transition = `width ${appSettings.deleteSeconds}s linear`;
-
-        timerBar.style.width = '100%';
-
-        msgDiv.appendChild(timerBar);
-
-        
-
-        setTimeout(() => { timerBar.style.width = '0%'; }, 50);
-
-        
-
-        setTimeout(async () => {
-
-            msgDiv.style.animation = 'fadeOut 0.5s ease';
-
-            setTimeout(() => msgDiv.remove(), 500);
-
-            if (msgId) {
-
-                await supabaseClient.from('messages').delete().eq('id', msgId);
-
-            }
-
-        }, appSettings.deleteSeconds * 1000);
-
-    }
-
     chatBox.appendChild(msgDiv);
-
     scrollToBottom();
 
+    // منطق الحذف التلقائي (للعام فقط وغير المؤرشف)
+    if (appSettings.timerEnabled && !isHistory && !isPrivate) {
+        const timerBar = document.createElement('div');
+        timerBar.className = 'timer-bar';
+        timerBar.style.width = '100%';
+        msgDiv.appendChild(timerBar);
+        
+        // تحريك الشريط
+        setTimeout(() => { 
+            timerBar.style.transition = `width ${appSettings.deleteSeconds}s linear`;
+            timerBar.style.width = '0%'; 
+        }, 50);
+        
+        // الحذف الفعلي
+        setTimeout(async () => {
+            msgDiv.style.animation = 'fadeOut 0.5s ease';
+            setTimeout(() => { if(msgDiv.parentNode) msgDiv.remove(); }, 500);
+            if (msgId && isMine) { // نحذف من الداتابيز فقط إذا كنت أنا المرسل لمنع التكرار
+                await supabaseClient.from('messages').delete().eq('id', msgId);
+            }
+        }, appSettings.deleteSeconds * 1000);
+    }
 }
+
 
 
 
@@ -1475,40 +1437,34 @@ function triggerPrivateUpload(type) { if (!username) return alert("سجل اسم
 
 
 async function sendFile(input, type) {
-
     if (!input.files[0]) return;
-
     const file = input.files[0];
-
-    const filePath = `${Date.now()}_${Math.floor(Math.random()*1000)}`;
+    
+    // استخراج الامتداد الأصلي للملف (مثل jpg أو png)
+    const fileExt = file.name.split('.').pop();
+    const filePath = `${Date.now()}_${Math.floor(Math.random()*1000)}.${fileExt}`;
 
     const target = input.dataset.target || 'public';
-
+    
     if(supabaseClient) {
-
-        const { error } = await supabaseClient.storage.from(MEDIA_BUCKET_NAME).upload(filePath, file);
-
-        if(!error) {
-
-            const { data } = supabaseClient.storage.from(MEDIA_BUCKET_NAME).getPublicUrl(filePath);
-
-            const oldTarget = currentChatTarget;
-
-            currentChatTarget = target === 'private' ? 'private' : 'public';
-
-            sendMessage('', type, data.publicUrl);
-
-            currentChatTarget = oldTarget;
-
+        const { data, error } = await supabaseClient.storage.from(MEDIA_BUCKET_NAME).upload(filePath, file);
+        
+        if(error) {
+            console.error("خطأ في الرفع:", error.message);
+            alert("فشل الرفع: " + error.message);
+            return;
         }
 
+        const { data: urlData } = supabaseClient.storage.from(MEDIA_BUCKET_NAME).getPublicUrl(filePath);
+        const oldTarget = currentChatTarget;
+        currentChatTarget = target === 'private' ? 'private' : 'public';
+        
+        sendMessage('', type, urlData.publicUrl);
+        currentChatTarget = oldTarget;
     }
-
     input.value = "";
-
-    input.dataset.target = 'public';
-
 }
+
 
 
 
@@ -1733,31 +1689,15 @@ function openPrivateLock() {
 
 
 function openPrivateChat() {
-
     // إخفاء المحتوى العام وإظهار الغرفة السرية
-
     document.getElementById('chat-interface').style.display = 'none';
-
     document.getElementById('private-chat-interface').style.display = 'flex';
-
     currentChatTarget = 'private';
-
-    loadRecentPrivateMessages();
-
-    startPrivateMessageListener();
-
-}
-
-
-
-function closePrivateChat() {
-
-    document.getElementById('private-chat-interface').style.display = 'none';
-
-    document.getElementById('chat-interface').style.display = 'flex';
-
-    currentChatTarget = 'public';
-
+    
+    // نقوم فقط بتحميل الرسائل السابقة، لأن المستمع يعمل بالفعل منذ البداية
+    loadRecentPrivateMessages(); 
+    
+    // تم حذف السطر المسبب للتكرار هنا
 }
 
 
