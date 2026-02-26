@@ -118,8 +118,40 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
 
 
 
-@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } } @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } } @keyframes pulse-color { 0% { text-shadow: 0 0 5px var(--success-color); } 50% { text-shadow: 0 0 20px var(--success-color); } 100% { text-shadow: 0 0 5px var(--success-color); } }
+@keyframes fadeIn { from { opacity: 0;} transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } } @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } } @keyframes pulse-color { 0% { text-shadow: 0 0 5px var(--success-color); } 50% { text-shadow: 0 0 20px var(--success-color); } 100% { text-shadow: 0 0 5px var(--success-color); } }
 
+.msg-actions {
+    display: none;
+    gap: 8px;
+    margin-top: 5px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    padding-top: 5px;
+}
+.message:hover .msg-actions {
+    display: flex;
+}
+.action-btn {
+    background: none;
+    border: none;
+    color: #aaa;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: 0.2s;
+}
+.action-btn:hover { color: var(--primary-color); }
+.action-btn.del:hover { color: var(--danger-color); }
+
+.msg-time {
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin-top: 4px;
+    display: block;
+    text-align: left; /* سيظهر في جهة اليسار داخل فقاعة الرسالة */
+}
+/* لتغيير مكان الوقت في رسائل الآخرين */
+.message[style*="flex-start"] .msg-time {
+    text-align: right;
+}
 
 
 </style></head>
@@ -1162,19 +1194,26 @@ async function sendMessage(content, type = 'text', finalContent = null) {
 function startMessageListener() {
     if (!supabaseClient) return;
 
-    // استماع للرسائل العامة
-    supabaseClient.channel('public-room')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-            appendMessageToUI(payload.new.sender_name, payload.new.content, payload.new.type, payload.new.color, payload.new.sender_name === username, false, payload.new.id, false);
-        })
-        .subscribe();
-
-    // استماع للرسائل الخاصة
-    supabaseClient.channel('private-room')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'private_messages' }, (payload) => {
-            appendMessageToUI(payload.new.sender_name, payload.new.content, payload.new.type, payload.new.color, payload.new.sender_name === username, false, payload.new.id, true);
-        })
-        .subscribe();
+    ['messages', 'private_messages'].forEach(tableName => {
+        supabaseClient.channel(tableName + '-realtime')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: tableName }, (payload) => {
+                appendMessageToUI(payload.new.sender_name, payload.new.content, payload.new.type, payload.new.color, payload.new.sender_name === username, false, payload.new.id, tableName === 'private_messages');
+            })
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: tableName }, (payload) => {
+                const isPrivate = tableName === 'private_messages';
+                const el = document.getElementById((isPrivate ? 'msg-private-' : 'msg-') + payload.new.id);
+                if (el) {
+                    const textDiv = el.querySelector('.msg-text-content');
+                    if (textDiv) textDiv.textContent = payload.new.content;
+                }
+            })
+            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: tableName }, (payload) => {
+                const isPrivate = tableName === 'private_messages';
+                const el = document.getElementById((isPrivate ? 'msg-private-' : 'msg-') + payload.old.id);
+                if (el) el.remove();
+            })
+            .subscribe();
+    });
 }
 
 
@@ -1231,60 +1270,72 @@ function startPrivateMessageListener() {
 
 
 
-function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgId, isPrivate = false) {
-    // اختيار الصندوق الصحيح بناءً على نوع الرسالة
+function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgId, isPrivate = false, timestamp = null) {
     const targetBoxId = isPrivate ? 'private-chat-box' : 'chat-box';
     const chatBox = document.getElementById(targetBoxId);
-    
     if (!chatBox) return;
+
+    const existingMsg = document.getElementById((isPrivate ? 'msg-private-' : 'msg-') + msgId);
+    if (existingMsg) {
+        const textDiv = existingMsg.querySelector('.msg-text-content');
+        if(textDiv && type === 'text') textDiv.textContent = content;
+        return;
+    }
+
+    // تجهيز الوقت والتاريخ
+    const dateObj = timestamp ? new Date(timestamp) : new Date();
+    const timeString = dateObj.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+    const dateString = dateObj.toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' });
+    const fullTimeHTML = `<span class="msg-time">${dateString} | ${timeString}</span>`;
 
     const msgDiv = document.createElement('div');
     msgDiv.className = 'message';
     msgDiv.id = (isPrivate ? 'msg-private-' : 'msg-') + msgId;
-    
     msgDiv.style.alignSelf = isMine ? 'flex-end' : 'flex-start';
+
     if(type === 'sticker') msgDiv.classList.add('sticker-msg');
     else {
         msgDiv.style.background = isMine ? '#007bff' : '#2a2a2a';
         msgDiv.style.borderRadius = isMine ? '15px 15px 0 15px' : '15px 15px 15px 0';
     }
 
+    let actionsHTML = '';
+    if (isMine && type === 'text') {
+        actionsHTML = `
+            <div class="msg-actions">
+                <button class="action-btn" onclick="editMessage('${msgId}', '${isPrivate ? 'private' : 'public'}')">✏️</button>
+                <button class="action-btn del" onclick="deleteSingleMessage('${msgId}', '${isPrivate ? 'private' : 'public'}')">🗑️</button>
+            </div>`;
+    }
+
     let innerHTML = '';
     if(type !== 'sticker') innerHTML += `<div class="message-sender" style="color:${color}">${sender}</div>`;
-    if (type === 'text') innerHTML += `<div>${content}</div>`;
+    
+    if (type === 'text') innerHTML += `<div class="msg-text-content">${content}</div>`;
     else if (type === 'image') innerHTML += `<img src="${content}" onload="scrollToBottom()">`;
     else if (type === 'video') innerHTML += `<video controls src="${content}" style="max-height:300px;"></video>`;
     else if (type === 'audio') innerHTML += `<audio controls src="${content}"></audio>`;
     else if (type === 'sticker') innerHTML += `<img src="${content}" class="sticker-img" onload="scrollToBottom()">`;
 
-    msgDiv.innerHTML = innerHTML;
+    // دمج محتوى الرسالة مع الوقت وأزرار التحكم
+    msgDiv.innerHTML = innerHTML + fullTimeHTML + actionsHTML;
     chatBox.appendChild(msgDiv);
     scrollToBottom();
 
-    // منطق الحذف التلقائي (للعام فقط وغير المؤرشف)
+    // منطق الحذف التلقائي
     if (appSettings.timerEnabled && !isHistory && !isPrivate) {
         const timerBar = document.createElement('div');
         timerBar.className = 'timer-bar';
         timerBar.style.width = '100%';
         msgDiv.appendChild(timerBar);
-        
-        // تحريك الشريط
-        setTimeout(() => { 
-            timerBar.style.transition = `width ${appSettings.deleteSeconds}s linear`;
-            timerBar.style.width = '0%'; 
-        }, 50);
-        
-        // الحذف الفعلي
+        setTimeout(() => { timerBar.style.transition = `width ${appSettings.deleteSeconds}s linear`; timerBar.style.width = '0%'; }, 50);
         setTimeout(async () => {
             msgDiv.style.animation = 'fadeOut 0.5s ease';
             setTimeout(() => { if(msgDiv.parentNode) msgDiv.remove(); }, 500);
-            if (msgId && isMine) { // نحذف من الداتابيز فقط إذا كنت أنا المرسل لمنع التكرار
-                await supabaseClient.from('messages').delete().eq('id', msgId);
-            }
+            if (msgId && isMine) await supabaseClient.from('messages').delete().eq('id', msgId);
         }, appSettings.deleteSeconds * 1000);
     }
 }
-
 
 
 
@@ -1794,6 +1845,24 @@ ensureZ.forEach(id=>{
 
 });
 
+async function deleteSingleMessage(msgId, type) {
+    if (!confirm("هل تريد حذف هذه الرسالة؟")) return;
+    const table = type === 'private' ? 'private_messages' : 'messages';
+    const { error } = await supabaseClient.from(table).delete().eq('id', msgId);
+    if (error) alert("خطأ في الحذف: " + error.message);
+}
+
+async function editMessage(msgId, type) {
+    const table = type === 'private' ? 'private_messages' : 'messages';
+    const msgElement = document.getElementById((type === 'private' ? 'msg-private-' : 'msg-') + msgId);
+    const oldText = msgElement.querySelector('.msg-text-content').textContent;
+    const newText = prompt("تعديل الرسالة:", oldText);
+    
+    if (newText && newText !== oldText) {
+        const { error } = await supabaseClient.from(table).update({ content: newText }).eq('id', msgId);
+        if (error) alert("فشل التعديل: " + error.message);
+    }
+}
 
 
 </script></body>
