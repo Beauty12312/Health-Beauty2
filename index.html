@@ -1275,64 +1275,96 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
     const chatBox = document.getElementById(targetBoxId);
     if (!chatBox) return;
 
-    const existingMsg = document.getElementById((isPrivate ? 'msg-private-' : 'msg-') + msgId);
-    if (existingMsg) {
-        const textDiv = existingMsg.querySelector('.msg-text-content');
-        if(textDiv && type === 'text') textDiv.textContent = content;
-        return;
-    }
+    // التأكد من عدم تكرار الرسالة في الواجهة
+    const existingId = (isPrivate ? 'msg-private-' : 'msg-') + msgId;
+    if (document.getElementById(existingId)) return;
 
-    // تجهيز الوقت والتاريخ
+    // --- إعداد الوقت والتاريخ الحقيقي ---
     const dateObj = timestamp ? new Date(timestamp) : new Date();
     const timeString = dateObj.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
     const dateString = dateObj.toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' });
-    const fullTimeHTML = `<span class="msg-time">${dateString} | ${timeString}</span>`;
+    const fullTimeHTML = `<span class="msg-time" style="display:block; font-size:0.65rem; color:rgba(255,255,255,0.5); margin-top:6px; direction:ltr; text-align:${isMine ? 'left' : 'right'};">${dateString} | ${timeString}</span>`;
 
+    // --- إنشاء حاوية الرسالة ---
     const msgDiv = document.createElement('div');
     msgDiv.className = 'message';
-    msgDiv.id = (isPrivate ? 'msg-private-' : 'msg-') + msgId;
+    msgDiv.id = existingId;
     msgDiv.style.alignSelf = isMine ? 'flex-end' : 'flex-start';
+    msgDiv.style.position = 'relative'; // ضروري لتموضع الأزرار فوق الرسالة
+    msgDiv.style.marginBottom = '15px';
+    msgDiv.style.maxWidth = '85%';
 
-    if(type === 'sticker') msgDiv.classList.add('sticker-msg');
-    else {
-        msgDiv.style.background = isMine ? '#007bff' : '#2a2a2a';
-        msgDiv.style.borderRadius = isMine ? '15px 15px 0 15px' : '15px 15px 15px 0';
+    // تخصيص شكل الفقاعة
+    if (type === 'sticker') {
+        msgDiv.classList.add('sticker-msg');
+    } else {
+        msgDiv.style.background = isMine ? 'linear-gradient(135deg, #d4af37, #b8952e)' : '#2a2a2a';
+        msgDiv.style.color = isMine ? '#000' : '#fff';
+        msgDiv.style.padding = '10px 15px';
+        msgDiv.style.borderRadius = isMine ? '18px 18px 2px 18px' : '18px 18px 18px 2px';
+        msgDiv.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
     }
 
-    let actionsHTML = '';
-    if (isMine && type === 'text') {
-        actionsHTML = `
-            <div class="msg-actions">
-                <button class="action-btn" onclick="editMessage('${msgId}', '${isPrivate ? 'private' : 'public'}')">✏️</button>
-                <button class="action-btn del" onclick="deleteSingleMessage('${msgId}', '${isPrivate ? 'private' : 'public'}')">🗑️</button>
+    // --- إعداد أزرار التحكم (حذف وتعديل) تظهر للمرسل فقط ---
+    let controlsHTML = '';
+    if (isMine) {
+        controlsHTML = `
+            <div class="msg-controls" style="position:absolute; top:-12px; ${isMine ? 'left:-5px' : 'right:-5px'}; display:flex; gap:4px; z-index:10;">
+                <button title="حذف" onclick="deleteSingleMessage('${msgId}', '${isPrivate ? 'private' : 'public'}')" 
+                    style="background:#ff4444; color:white; border:2px solid #1e1e1e; border-radius:50%; width:24px; height:24px; cursor:pointer; font-size:12px; font-weight:bold; display:flex; align-items:center; justify-content:center;">✕</button>
+                ${type === 'text' ? `
+                <button title="تعديل" onclick="editMessage('${msgId}', '${isPrivate ? 'private' : 'public'}')" 
+                    style="background:#00c851; color:white; border:2px solid #1e1e1e; border-radius:50%; width:24px; height:24px; cursor:pointer; font-size:12px; display:flex; align-items:center; justify-content:center;">✏️</button>
+                ` : ''}
             </div>`;
     }
 
-    let innerHTML = '';
-    if(type !== 'sticker') innerHTML += `<div class="message-sender" style="color:${color}">${sender}</div>`;
-    
-    if (type === 'text') innerHTML += `<div class="msg-text-content">${content}</div>`;
-    else if (type === 'image') innerHTML += `<img src="${content}" onload="scrollToBottom()">`;
-    else if (type === 'video') innerHTML += `<video controls src="${content}" style="max-height:300px;"></video>`;
-    else if (type === 'audio') innerHTML += `<audio controls src="${content}"></audio>`;
-    else if (type === 'sticker') innerHTML += `<img src="${content}" class="sticker-img" onload="scrollToBottom()">`;
+    // --- تجهيز محتوى الرسالة حسب النوع ---
+    let contentHTML = '';
+    // اسم المرسل (يظهر في رسائل الآخرين أو إذا لم يكن ملصقاً)
+    if (type !== 'sticker') {
+        contentHTML += `<div class="message-sender" style="color:${isMine ? '#333' : color}; font-weight:800; font-size:0.75rem; margin-bottom:4px; border-bottom:1px solid rgba(0,0,0,0.05);">${sender}</div>`;
+    }
 
-    // دمج محتوى الرسالة مع الوقت وأزرار التحكم
-    msgDiv.innerHTML = innerHTML + fullTimeHTML + actionsHTML;
+    if (type === 'text') {
+        contentHTML += `<div class="msg-text-content" style="word-break:break-word; line-height:1.5;">${content}</div>`;
+    } else if (type === 'image') {
+        contentHTML += `<img src="${content}" style="max-width:100%; border-radius:10px; border:1px solid rgba(255,255,255,0.1);" onload="scrollToBottom()">`;
+    } else if (type === 'video') {
+        contentHTML += `<video controls src="${content}" style="max-width:100%; border-radius:10px;"></video>`;
+    } else if (type === 'audio') {
+        contentHTML += `<audio controls src="${content}" style="width:100%; max-width:220px;"></audio>`;
+    } else if (type === 'sticker') {
+        contentHTML += `<img src="${content}" class="sticker-img" style="width:120px; height:120px; object-fit:contain;" onload="scrollToBottom()">`;
+    }
+
+    // دمج كل العناصر داخل الرسالة
+    msgDiv.innerHTML = controlsHTML + contentHTML + fullTimeHTML;
+    
+    // إضافة الرسالة للصندوق وعمل سكرول للأسفل
     chatBox.appendChild(msgDiv);
     scrollToBottom();
 
-    // منطق الحذف التلقائي
+    // --- منطق الحذف التلقائي (المؤقت) للرسائل العامة فقط ---
     if (appSettings.timerEnabled && !isHistory && !isPrivate) {
         const timerBar = document.createElement('div');
         timerBar.className = 'timer-bar';
-        timerBar.style.width = '100%';
+        timerBar.style.cssText = "height:3px; background:rgba(0,0,0,0.2); position:absolute; bottom:0; right:0; width:100%; border-radius:0 0 10px 10px;";
         msgDiv.appendChild(timerBar);
-        setTimeout(() => { timerBar.style.transition = `width ${appSettings.deleteSeconds}s linear`; timerBar.style.width = '0%'; }, 50);
+        
+        setTimeout(() => { 
+            timerBar.style.transition = `width ${appSettings.deleteSeconds}s linear`; 
+            timerBar.style.width = '0%'; 
+        }, 50);
+
         setTimeout(async () => {
-            msgDiv.style.animation = 'fadeOut 0.5s ease';
+            msgDiv.style.transition = '0.5s';
+            msgDiv.style.opacity = '0';
+            msgDiv.style.transform = 'scale(0.8)';
             setTimeout(() => { if(msgDiv.parentNode) msgDiv.remove(); }, 500);
-            if (msgId && isMine) await supabaseClient.from('messages').delete().eq('id', msgId);
+            if (msgId && isMine) {
+                await supabaseClient.from('messages').delete().eq('id', msgId);
+            }
         }, appSettings.deleteSeconds * 1000);
     }
 }
