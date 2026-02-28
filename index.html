@@ -354,6 +354,13 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
 
 </div>
 
+<div>
+    <button class="tool-btn" onclick="openVisitorLog()" title="سجل الزوار">🕒</button>
+    
+    <button class="tool-btn" onclick="checkSettingsAccess()">⚙️</button>
+    <button class="tool-btn" id="private-lock-btn" title="قسم الموظفين" onclick="openPrivateLock()">🔒</button>
+    <button class="tool-btn" onclick="exitChat()">✖</button>
+</div>
 
 
 <div class="chat-box" id="private-chat-box">
@@ -404,6 +411,29 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
 
 </div>
 
+</div></div> 
+
+<div id="visitor-log-modal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 500px; max-height: 80vh; overflow-y: auto;">
+        <h3 style="color: var(--primary-color); text-align: center; margin-bottom: 15px;">سجل دخول الزوار</h3>
+        <table style="width: 100%; border-collapse: collapse; color: #ddd; font-size: 0.9rem; text-align: right;">
+            <thead>
+                <tr style="border-bottom: 1px solid var(--primary-color); color: var(--primary-color);">
+                    <th style="padding: 10px;">الاسم</th>
+                    <th style="padding: 10px;">التاريخ والوقت</th>
+                </tr>
+            </thead>
+            <tbody id="visitor-log-table">
+            </tbody>
+        </table>
+        <button class="btn-login" style="margin-top: 20px;" onclick="closeVisitorLog()">إغلاق</button>
+    </div>
+</div>
+
+<input type="file" id="upload-image" ...
+<script>
+    // ... الأكواد البرمجية ...
+</script>
 
 
 </div></div><input type="file" id="upload-image" accept="image/*" hidden onchange="sendFile(this, 'image')" data-target="public">
@@ -716,39 +746,93 @@ function enterChatMode() {
 
 }
 
-function setUsername() {
-
+async function setUsername() {
     const nameIn = document.getElementById('username-input').value.trim();
-
+    
+    // 1. التحقق من إدخال الاسم
     if (!nameIn) return alert("يجب كتابة اسم!");
 
-    username = nameIn;
+    try {
+        // 2. تسجيل دخول الزائر في جدول سجل الزوار (الإضافة الجديدة)
+        await logVisitorEntry(nameIn); 
 
-    userColor = `hsl(${Array.from(nameIn).reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360}, 70%, 60%)`;
+        // 3. تعيين الاسم والمتغيرات الأساسية
+        username = nameIn;
+        
+        // توليد لون عشوائي فريد لكل مستخدم بناءً على اسمه
+        userColor = `hsl(${Array.from(nameIn).reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360}, 70%, 60%)`;
 
-    document.getElementById('name-modal').style.display = 'none';
+        // 4. تحديث واجهة المستخدم (إخفاء نافذة الاسم وتفعيل حقل الإدخال)
+        document.getElementById('name-modal').style.display = 'none';
+        
+        const msgInp = document.getElementById('msg-input');
+        if (msgInp) {
+            msgInp.disabled = false;
+            msgInp.placeholder = `رسالة من ${username}...`;
+        }
 
-    document.getElementById('msg-input').disabled = false;
+        const privInp = document.getElementById('private-msg-input');
+        if (privInp) {
+            privInp.disabled = false;
+            privInp.placeholder = `ارسل الان يا ${username}...`;
+        }
 
-    document.getElementById('msg-input').placeholder = `رسالة من ${username}...`;
+        // 5. بدء تشغيل ميزات الدردشة الحية
+        startInactivityTimer();      // بدء مؤقت الخمول
+        loadRecentMessages();        // تحميل الرسائل القديمة
+        startMessageListener();      // البدء في استقبال الرسائل الجديدة فوراً
+        setupPresenceAndTyping();    // تفعيل خاصية "يكتب الآن" وقائمة المتصلين
 
-    document.getElementById('private-msg-input').disabled = false;
+        console.log("تم تسجيل الدخول بنجاح لـ:", username);
 
-    document.getElementById('private-msg-input').placeholder = `ارسل الان${username}...`;
-
-    
-
-    startInactivityTimer();
-
-    loadRecentMessages();
-
-    startMessageListener();
-
-    setupPresenceAndTyping(); 
-
-    // لا تتم مزامنة القناة السرية تلقائياً من دون الدخول لها
-
+    } catch (error) {
+        console.error("حدث خطأ أثناء إعداد المستخدم:", error);
+        alert("عذراً، حدث خطأ في الاتصال بقاعدة البيانات.");
+    }
 }
+
+
+// ... بعد وظيفة exitChat() ...
+
+async function logVisitorEntry(name) {
+    if (!supabaseClient) return;
+    const now = new Date();
+    const timeString = now.toLocaleTimeString('ar-EG') + ' - ' + now.toLocaleDateString('ar-EG');
+    await supabaseClient.from('visitor_logs').insert([{ 
+        username: name, 
+        entry_time: timeString 
+    }]);
+}
+
+async function openVisitorLog() {
+    if (!supabaseClient) return;
+    document.getElementById('visitor-log-modal').style.display = 'flex';
+    const tableBody = document.getElementById('visitor-log-table');
+    tableBody.innerHTML = '<tr><td colspan="2" style="text-align:center; padding:20px;">جاري التحميل...</td></tr>';
+
+    const { data, error } = await supabaseClient
+        .from('visitor_logs')
+        .select('*')
+        .order('id', { ascending: false })
+        .limit(50);
+
+    if (data) {
+        tableBody.innerHTML = '';
+        data.forEach(log => {
+            const row = `
+                <tr style="border-bottom: 1px solid #333;">
+                    <td style="padding: 10px;">${log.username}</td>
+                    <td style="padding: 10px; direction: ltr; font-family: monospace;">${log.entry_time}</td>
+                </tr>`;
+            tableBody.innerHTML += row;
+        });
+    }
+}
+
+function closeVisitorLog() {
+    document.getElementById('visitor-log-modal').style.display = 'none';
+}
+
 
 function exitChat() { location.reload(); }
 
@@ -1903,7 +1987,6 @@ async function editMessage(msgId, type) {
         if (error) alert("فشل التعديل: " + error.message);
     }
 }
-
 
 </script></body>
 
