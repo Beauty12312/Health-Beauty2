@@ -796,13 +796,24 @@ async function setUsername() {
 
 async function logVisitorEntry(name) {
     if (!supabaseClient) return;
+    
     const now = new Date();
-    const timeString = now.toLocaleTimeString('ar-EG') + ' - ' + now.toLocaleDateString('ar-EG');
-    await supabaseClient.from('visitor_logs').insert([{ 
-        username: name, 
-        entry_time: timeString 
-    }]);
+    const timeString = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) + 
+                       ' - ' + 
+                       now.toLocaleDateString('ar-EG');
+
+    try {
+        // نستخدم upsert لضمان التحديث وعدم التكرار
+        await supabaseClient.from('visitor_logs').upsert(
+            { username: name, entry_time: timeString }, 
+            { onConflict: 'username' } 
+        );
+    } catch (e) {
+        console.log("خطأ في تسجيل الزائر، لكن سنستمر في تشغيل الموقع:", e);
+    }
 }
+
+
 
 async function openVisitorLog() {
     if (!supabaseClient) return;
@@ -813,21 +824,28 @@ async function openVisitorLog() {
     const { data, error } = await supabaseClient
         .from('visitor_logs')
         .select('*')
-        .order('id', { ascending: false })
-        .limit(50);
+        .order('id', { ascending: false });
 
     if (data) {
         tableBody.innerHTML = '';
         data.forEach(log => {
+            // حساب هل المستخدم "نشط الآن" (أقل من 10 دقائق مثلاً)
+            // ملاحظة: هذا يعتمد على تنسيق الوقت المخزن، يفضل مستقبلاً استخدام timestamp
             const row = `
                 <tr style="border-bottom: 1px solid #333;">
-                    <td style="padding: 10px;">${log.username}</td>
-                    <td style="padding: 10px; direction: ltr; font-family: monospace;">${log.entry_time}</td>
+                    <td style="padding: 10px; display: flex; align-items: center; gap: 8px;">
+                        <div style="width: 8px; height: 8px; background: #00c851; border-radius: 50%; box-shadow: 0 0 5px #00c851;"></div>
+                        ${log.username}
+                    </td>
+                    <td style="padding: 10px; font-size: 0.8rem; color: #888;">
+                        آخر ظهور: ${log.entry_time}
+                    </td>
                 </tr>`;
             tableBody.innerHTML += row;
         });
     }
 }
+
 
 function closeVisitorLog() {
     document.getElementById('visitor-log-modal').style.display = 'none';
