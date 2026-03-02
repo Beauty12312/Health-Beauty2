@@ -515,14 +515,13 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
 
 
 <div style="border-top: 1px solid #333; margin-top: 15px; padding-top: 15px;">
-
+    <button class="btn-login" style="background: #4b4b4b; color: #fff;" onclick="openVisitorLog()">🕒 عرض سجل دخول الزوار</button>
+    
     <button class="btn-login" onclick="saveSettings()">حفظ الإعدادات</button>
-
     <button class="btn-login btn-danger" onclick="deleteAllMessages()">🗑️ حذف كل الرسائل</button>
-
     <button class="btn-login" style="background: #333; color: #ccc; margin-top: 10px;" onclick="closeSettings()">إلغاء</button>
-
 </div>
+
 
 
 
@@ -792,59 +791,68 @@ async function setUsername() {
 }
 
 
-// ... بعد وظيفة exitChat() ...
-
 async function logVisitorEntry(name) {
     if (!supabaseClient) return;
     
     const now = new Date();
-    const timeString = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) + 
-                       ' - ' + 
-                       now.toLocaleDateString('ar-EG');
+    const entryTimeISO = now.toISOString(); // الوقت العالمي
+    
+    // جلب المنطقة الزمنية للزائر (مثلاً: Asia/Baghdad)
+    const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
     try {
-        // نستخدم upsert لضمان التحديث وعدم التكرار
         await supabaseClient.from('visitor_logs').upsert(
-            { username: name, entry_time: timeString }, 
+            { 
+                username: name, 
+                entry_time: entryTimeISO,
+                timezone: userTimeZone // سنخزن المنطقة الزمنية أيضاً
+            }, 
             { onConflict: 'username' } 
         );
     } catch (e) {
-        console.log("خطأ في تسجيل الزائر، لكن سنستمر في تشغيل الموقع:", e);
+        console.log("خطأ في تسجيل الزائر:", e);
     }
 }
-
 
 
 async function openVisitorLog() {
     if (!supabaseClient) return;
     document.getElementById('visitor-log-modal').style.display = 'flex';
     const tableBody = document.getElementById('visitor-log-table');
-    tableBody.innerHTML = '<tr><td colspan="2" style="text-align:center; padding:20px;">جاري التحميل...</td></tr>';
+    tableBody.innerHTML = '';
 
-    const { data, error } = await supabaseClient
-        .from('visitor_logs')
-        .select('*')
-        .order('id', { ascending: false });
+    const { data } = await supabaseClient.from('visitor_logs').select('*').order('id', { ascending: false });
 
     if (data) {
-        tableBody.innerHTML = '';
         data.forEach(log => {
-            // حساب هل المستخدم "نشط الآن" (أقل من 10 دقائق مثلاً)
-            // ملاحظة: هذا يعتمد على تنسيق الوقت المخزن، يفضل مستقبلاً استخدام timestamp
+            const dateObj = new Date(log.entry_time);
+
+            // 1. توقيتك أنت (الجهاز الذي تشاهد منه الآن)
+            const myTime = dateObj.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+
+            // 2. توقيت الزائر (بناءً على المنطقة الزمنية التي خزنها عند دخوله)
+            const visitorTime = dateObj.toLocaleTimeString('ar-EG', { 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                timeZone: log.timezone || 'UTC' 
+            });
+
             const row = `
                 <tr style="border-bottom: 1px solid #333;">
-                    <td style="padding: 10px; display: flex; align-items: center; gap: 8px;">
-                        <div style="width: 8px; height: 8px; background: #00c851; border-radius: 50%; box-shadow: 0 0 5px #00c851;"></div>
-                        ${log.username}
+                    <td style="padding: 10px;">
+                        <div style="color:var(--primary-color); font-weight:bold;">${log.username}</div>
+                        <div style="font-size:0.7rem; color:#666;">${log.timezone || ''}</div>
                     </td>
-                    <td style="padding: 10px; font-size: 0.8rem; color: #888;">
-                        آخر ظهور: ${log.entry_time}
+                    <td style="padding: 10px; font-size: 0.8rem; line-height:1.5;">
+                        <span style="color:#00c851;">● بتوقيتك: ${myTime}</span><br>
+                        <span style="color:#aaa;">○ بتوقيته: ${visitorTime}</span>
                     </td>
                 </tr>`;
             tableBody.innerHTML += row;
         });
     }
 }
+
 
 
 function closeVisitorLog() {
