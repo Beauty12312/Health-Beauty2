@@ -1434,7 +1434,8 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
     // التعامل مع أنواع الرسائل المختلفة
     switch(type) {
         case 'text':
-            contentHTML += `<div class="msg-text-content" style="word-break:break-word; line-height:1.4;">${content}</div>`;
+                        const linkedContent = linkify(content);
+            contentHTML += `<div class="msg-text-content" style="word-break:break-word; line-height:1.4;">${linkedContent}</div>`;
             break;
         case 'image':
             contentHTML += `<img src="${content}" style="max-width:100%; border-radius:10px; margin-top:5px;" onload="scrollToBottom()">`;
@@ -2013,6 +2014,14 @@ async function editMessage(msgId, type) {
         if (error) alert("فشل التعديل: " + error.message);
     }
 }
+
+function linkify(text) {
+    const urlPattern = /(\b(https?|ftp|file):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig;
+    return text.replace(urlPattern, function(url) {
+        return `<a href="${url}" target="_blank" style="color: #00e5ff; text-decoration: underline;">${url}</a>`;
+    });
+}
+
 
 </script></body>
 
