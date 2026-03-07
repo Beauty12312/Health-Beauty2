@@ -94,7 +94,63 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
 
 
 
-/* --- نافذة الراديو الجديدة --- / #radio-picker { display: none; position: absolute; bottom: 90px; / رفعنا القائمة للأعلى */ right: 50px; background: #1a1a1a; border: 1px solid var(--primary-color); border-radius: 10px; width: 220px; padding: 10px; z-index: 25; flex-direction: column; gap: 5px; box-shadow: 0 0 20px rgba(0,0,0,0.9); } .radio-option { padding: 10px; background: #252525; color: #fff; border-radius: 5px; cursor: pointer; text-align: center; font-size: 0.9rem; transition: 0.2s; border: 1px solid #333; margin-bottom: 5px; } .radio-option:hover { background: #333; border-color: var(--primary-color); } .radio-option.playing { background: var(--success-color); border-color: var(--success-color); color: #fff; animation: pulse 1s infinite; } .radio-stop { background: var(--danger-color) !important; margin-top: 5px; }
+/* نافذة الراديو المنبثقة للأعلى */
+#radio-picker {
+    display: none; 
+    position: absolute;
+    bottom: 70px; /* تظهر فوق شريط الأدوات */
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1a1a;
+    border: 1px solid var(--primary-color);
+    border-radius: 12px;
+    width: 250px;
+    padding: 15px;
+    z-index: 10000;
+    flex-direction: column;
+    box-shadow: 0 -5px 25px rgba(0,0,0,0.8);
+}
+
+.radio-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 8px;
+}
+
+.radio-option {
+    padding: 12px;
+    background: #252525;
+    color: #fff;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: center;
+    font-size: 0.9rem;
+    transition: 0.2s;
+    border: 1px solid #333;
+    margin-bottom: 8px;
+}
+
+.radio-option:hover {
+    background: #333;
+    border-color: var(--primary-color);
+}
+
+.radio-option.playing {
+    background: var(--success-color);
+    border-color: var(--success-color);
+    animation: pulse 1.5s infinite;
+}
+
+/* زر الإيقاف داخل القائمة */
+.radio-stop-btn {
+    background: var(--danger-color) !important;
+    color: white !important;
+    font-weight: bold;
+}
+
 
 
 
@@ -266,10 +322,6 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
 
     <button id="radio-btn" class="tool-btn" onclick="toggleRadioMenu()" title="اختر محطة راديو">📻</button>
 
-    <!-- زر ايقاف الراديو السريع -->
-
-    <button class="tool-btn" onclick="stopRadio()" title="إيقاف الراديو">⏹️</button>
-
     <button class="tool-btn" onclick="toggleStickers()" title="ملصقات">💖</button>
 
     <button class="tool-btn" onclick="toggleEmoji()" title="إيموجي">😀</button>
@@ -429,12 +481,6 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
         <button class="btn-login" style="margin-top: 20px;" onclick="closeVisitorLog()">إغلاق</button>
     </div>
 </div>
-
-<input type="file" id="upload-image" ...
-<script>
-    // ... الأكواد البرمجية ...
-</script>
-
 
 </div></div><input type="file" id="upload-image" accept="image/*" hidden onchange="sendFile(this, 'image')" data-target="public">
 
@@ -967,168 +1013,79 @@ function showTypingIndicator(user) {
 
 
 
-// --- Radio Logic (Updated Fix) ---
-
+// 1. تهيئة قائمة الراديو عند تحميل الصفحة
 function initRadioMenu() {
-
     const menu = document.getElementById('radio-picker');
-
-    menu.innerHTML = ''; // تنظيف القائمة أولاً
-
-
-
-    // رأس القائمة مع زر إغلاق
-
-    const header = document.createElement('div');
-
-    header.style.display = 'flex';
-
-    header.style.justifyContent = 'space-between';
-
-    header.style.alignItems = 'center';
-
-    header.style.marginBottom = '10px';
-
-    header.style.borderBottom = '1px solid #333';
-
-    header.style.paddingBottom = '5px';
-
+    if (!menu) return;
     
+    menu.innerHTML = `
+        <div class="radio-header">
+            <span style="color:var(--primary-color); font-weight:bold;">قائمة الراديو</span>
+            <span style="cursor:pointer; color:#ff4444; font-size:1.2rem;" onclick="toggleRadioMenu()">✖</span>
+        </div>
+        <div class="radio-option radio-stop-btn" onclick="stopRadio()">⏹️ إيقاف التشغيل</div>
+        <div id="stations-list"></div>
+    `;
 
-    header.innerHTML = `<span style="color:#aaa; font-size:0.9rem;">اختر محطة:</span><span class="menu-close-btn" onclick="toggleRadioMenu()">✖</span>`;
-
-    menu.appendChild(header);
-
-
-
-    // زر إيقاف
-
-    const stopBtn = document.createElement('div');
-
-    stopBtn.className = 'radio-option radio-stop';
-
-    stopBtn.innerText = '⏹️ إيقاف الراديو';
-
-    stopBtn.onclick = stopRadio;
-
-    menu.appendChild(stopBtn);
-
-
-
-    // أزرار المحطات
-
+    const listContainer = menu.querySelector('#stations-list');
     for (const key in radioStations) {
-
         const station = radioStations[key];
-
         const btn = document.createElement('div');
-
         btn.className = 'radio-option';
-
         btn.id = `station-${key}`;
-
         btn.innerText = station.name;
-
         btn.onclick = () => playStation(key);
-
-        menu.appendChild(btn);
-
+        listContainer.appendChild(btn);
     }
-
 }
 
-
-
+// 2. إظهار وإخفاء القائمة
 function toggleRadioMenu() {
-
     const menu = document.getElementById('radio-picker');
-
-    const emoji = document.getElementById('emoji-picker');
-
-    const sticker = document.getElementById('sticker-picker');
-
-    
-
-    emoji.style.display = 'none';
-
-    sticker.style.display = 'none';
-
-
+    // إخفاء القوائم الأخرى أولاً
+    document.getElementById('sticker-picker').style.display = 'none';
+    document.getElementById('emoji-picker').style.display = 'none';
 
     if (menu.style.display === 'flex') {
-
         menu.style.display = 'none';
-
     } else {
-
         menu.style.display = 'flex';
-
+        // تحديث حالة الأزرار داخل القائمة
+        updateRadioUI(); 
     }
-
 }
 
-
-
+// 3. تشغيل المحطة وإغلاق النافذة تلقائياً
 function playStation(key) {
-
     const player = document.getElementById('radio-player');
-
-    const btn = document.getElementById('radio-btn');
-
     const station = radioStations[key];
 
-
-
-    document.querySelectorAll('.radio-option').forEach(b => b.classList.remove('playing'));
-
-    document.getElementById(`station-${key}`).classList.add('playing');
-
-
-
     player.src = station.url;
-
     player.play().then(() => {
-
         isRadioPlaying = true;
-
-        btn.classList.add('radio-active');
-
-        // === التعديل هنا: إخفاء القائمة تلقائياً عند الاختيار ===
-
+        // تمييز زر الراديو في شريط الأدوات
+        document.getElementById('radio-btn').classList.add('radio-active');
+        // إغلاق النافذة تلقائياً بعد الاختيار
         document.getElementById('radio-picker').style.display = 'none';
-
-    }).catch(e => alert("عذراً، حدث خطأ في تشغيل هذه المحطة حالياً."));
-
+    }).catch(e => {
+        alert("المحطة غير متاحة حالياً");
+    });
 }
 
-
-
+// 4. إيقاف الراديو من داخل القائمة
 function stopRadio() {
-
     const player = document.getElementById('radio-player');
-
-    const btn = document.getElementById('radio-btn');
-
-    
-
-    try {
-
-        player.pause();
-
-        player.src = "";
-
-    } catch (e) { /* ignore */ }
-
+    player.pause();
+    player.src = "";
     isRadioPlaying = false;
-
-    btn.classList.remove('radio-active');
-
-    
-
-    document.querySelectorAll('.radio-option').forEach(b => b.classList.remove('playing'));
-
+    document.getElementById('radio-btn').classList.remove('radio-active');
     document.getElementById('radio-picker').style.display = 'none';
+}
 
+// وظيفة مساعدة لتحديث الألوان داخل القائمة
+function updateRadioUI() {
+    document.querySelectorAll('.radio-option').forEach(btn => btn.classList.remove('playing'));
+    // إذا كان هناك شيء يعمل، ابحث عن المحطة المفعلة (اختياري)
 }
 
 
