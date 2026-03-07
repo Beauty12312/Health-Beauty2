@@ -6,7 +6,32 @@
 
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;500;800&display=swap" rel="stylesheet">
 
+
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><style>
+/* حاوية التفاعلات أسفل الرسالة */
+.message-reactions {
+    display: flex;
+    gap: 4px;
+    margin-top: -12px; /* لكي تلتصق بالرسالة من الأسفل */
+    margin-bottom: 10px;
+    padding-right: 15px; /* لتبدأ من جهة اليمين */
+    z-index: 5;
+}
+
+.reaction-badge {
+    background: #252525;
+    border: 1px solid #444;
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+    transition: 0.2s;
+}
+
+.reaction-badge:hover { transform: scale(1.1); background: #333; }
+
 
 :root {
 
@@ -370,6 +395,11 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
 
 </div>
 
+<div id="reply-preview" style="display:none; background:#252525; padding:8px 15px; border-right:4px solid var(--primary-color); position:relative; animation:fadeIn 0.3s;">
+    <span id="reply-user" style="color:var(--primary-color); font-weight:bold; font-size:0.8rem;"></span>
+    <p id="reply-text" style="font-size:0.8rem; color:#aaa; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></p>
+    <button onclick="cancelReply()" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); background:none; border:none; color:#ff4444; cursor:pointer;">✖</button>
+</div>
 
 
 <div class="chat-input-area">
@@ -449,6 +479,11 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
 
 <div id="private-emoji-picker" style="display:none"></div>
 
+<div id="reply-preview" style="display:none; background:#252525; padding:8px 15px; border-right:4px solid var(--primary-color); position:relative; animation:fadeIn 0.3s;">
+    <span id="reply-user" style="color:var(--primary-color); font-weight:bold; font-size:0.8rem;"></span>
+    <p id="reply-text" style="font-size:0.8rem; color:#aaa; margin:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></p>
+    <button onclick="cancelReply()" style="position:absolute; left:10px; top:50%; transform:translateY(-50%); background:none; border:none; color:#ff4444; cursor:pointer;">✖</button>
+</div>
 
 
 <div class="chat-input-area">
@@ -598,6 +633,8 @@ let username = "";
 let userColor = "#fff";
 
 let currentChatTarget = 'public'; // 'public' or 'private'
+
+let replyToData = null; // لتخزين بيانات الرسالة التي نرد عليها
 
 
 
@@ -1162,26 +1199,31 @@ function showStickerCategory(cat, el) {
 
 async function loadRecentMessages() {
     if(!supabaseClient) return;
-    // جلب الرسائل مع التأكد من طلب عمود created_at
     const { data } = await supabaseClient.from('messages').select('*').order('created_at', { ascending: true }).limit(50);
     
     if (data) {
         data.forEach(msg => {
             const msgTime = new Date(msg.created_at).getTime();
             const age = (Date.now() - msgTime) / 1000;
-            
-            // نظام الحذف التلقائي للرسائل القديمة بناءً على الإعدادات
-            if (appSettings.timerEnabled && age > appSettings.deleteSeconds) {
-                return; 
-            }
-            // التعديل الجوهري: إضافة msg.created_at في نهاية الاستدعاء
-            appendMessageToUI(msg.sender_name, msg.content, msg.type, msg.color, msg.sender_name === username, true, msg.id, false, msg.created_at);
+            if (appSettings.timerEnabled && age > appSettings.deleteSeconds) return; 
+
+            appendMessageToUI(
+                msg.sender_name, 
+                msg.content, 
+                msg.type, 
+                msg.color, 
+                msg.sender_name === username, 
+                true, 
+                msg.id, 
+                false, 
+                msg.created_at,
+                msg.reply_to,
+                msg.reactions // المعامل رقم 11 الصحيح
+            );
         });
         scrollToBottom();
     }
 }
-
-
 
 
 function handleSendMessageClick() {
@@ -1203,50 +1245,48 @@ function handleSendMessageClick() {
 // sendMessage now respects currentChatTarget and writes to either messages or private_messages
 
 async function sendMessage(content, type = 'text', finalContent = null) {
-
     if (!username) return;
-
     const text = content ? content.trim() : "";
+    
+    // إذا كان المحتوى يبدأ بـ http وينتهي بـ .gif (رابط ملصق)، نغير النوع تلقائياً إلى sticker
+    let msgType = type;
+    if (text.includes('giphy.com') || text.endsWith('.gif')) {
+        msgType = 'sticker';
+    }
 
     const msgToSend = finalContent || text;
+    if (!msgToSend && msgType === 'text') return;
 
-    if (!msgToSend && type === 'text') return;
+    if (currentChatTarget === 'public' && text === appSettings.adminCode) { openSettings(); return; }
 
-
-
-    // handle admin code for settings entry only in public chat
-
-    if (currentChatTarget === 'public' && text === appSettings.adminCode) { openSettings(); if(document.getElementById('msg-input')) document.getElementById('msg-input').value = ""; return; }
-
-    if (currentChatTarget === 'private' && text === appSettings.adminCode) { alert('كلمة المشرف لا تفتح أي إعدادات هنا'); }
-
-
-
-    // clear appropriate input
-
+    // مسح الحقول
     if (currentChatTarget === 'public') {
-
         if(document.getElementById('msg-input')) document.getElementById('msg-input').value = "";
-
     } else {
-
         if(document.getElementById('private-msg-input')) document.getElementById('private-msg-input').value = "";
-
     }
 
-
+    // تجهيز بيانات الرد
+    let replyContext = null;
+    if (replyToData) {
+        replyContext = { to: replyToData.user, text: replyToData.text, id: replyToData.id };
+    }
 
     if(supabaseClient) {
-
         const table = currentChatTarget === 'private' ? 'private_messages' : 'messages';
-
-        await supabaseClient.from(table).insert([{ sender_name: username, content: msgToSend, type: type, color: userColor }]);
-
+        await supabaseClient.from(table).insert([{ 
+            sender_name: username, 
+            content: msgToSend, 
+            type: msgType, // هنا يتم حفظ النوع (sticker أو text) في قاعدة البيانات
+            color: userColor,
+            reply_to: replyContext 
+        }]);
     }
-
+    cancelReply(); 
     resetInactivityTimer();
-
 }
+
+
 
 function startMessageListener() {
     if (!supabaseClient) return;
@@ -1263,17 +1303,30 @@ function startMessageListener() {
                     false, 
                     payload.new.id, 
                     tableName === 'private_messages',
-                    payload.new.created_at
+                    payload.new.created_at, // الفاصلة المصححة هنا
+                    payload.new.reply_to,   // المعامل العاشر للرد
+                    payload.new.reactions
                 );
             })
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: tableName }, (payload) => {
+                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: tableName }, (payload) => {
                 const isPrivate = tableName === 'private_messages';
-                const el = document.getElementById((isPrivate ? 'msg-private-' : 'msg-') + payload.new.id);
+                const msgId = payload.new.id;
+                const existingId = (isPrivate ? 'msg-private-' : 'msg-') + msgId;
+                
+                // 1. تحديث نص الرسالة إذا تم تعديله
+                const el = document.getElementById(existingId);
                 if (el) {
                     const textDiv = el.querySelector('.msg-text-content');
-                    if (textDiv) textDiv.textContent = payload.new.content;
+                    if (textDiv && payload.new.type === 'text') textDiv.textContent = payload.new.content;
+                }
+
+                // 2. التحديث المطلوب لحفظ وظهور التفاعلات فوراً
+                const reactionsDiv = document.getElementById(`reacts-${existingId}`);
+                if (reactionsDiv) {
+                    renderReactions(reactionsDiv, payload.new.reactions, msgId, isPrivate);
                 }
             })
+
             .on('postgres_changes', { event: 'DELETE', schema: 'public', table: tableName }, (payload) => {
                 const isPrivate = tableName === 'private_messages';
                 const el = document.getElementById((isPrivate ? 'msg-private-' : 'msg-') + payload.old.id);
@@ -1291,13 +1344,23 @@ async function loadRecentPrivateMessages() {
     const { data } = await supabaseClient.from('private_messages').select('*').order('created_at', { ascending: true }).limit(200);
     if (data) {
         data.forEach(msg => {
-            // التعديل الجوهري: إضافة msg.created_at لضمان ثبات الوقت بعد تسجيل الدخول
-            appendMessageToUI(msg.sender_name, msg.content, msg.type, msg.color, msg.sender_name === username, true, msg.id, true, msg.created_at);
+            appendMessageToUI(
+                msg.sender_name, 
+                msg.content, 
+                msg.type, 
+                msg.color, 
+                msg.sender_name === username, 
+                true, 
+                msg.id, 
+                true, 
+                msg.created_at,
+                msg.reply_to,
+                msg.reactions // المعامل رقم 11 الصحيح
+            );
         });
         scrollToBottom();
     }
 }
-
 
 
 function startPrivateMessageListener() {
@@ -1328,36 +1391,77 @@ function startPrivateMessageListener() {
 
 
 
-function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgId, isPrivate = false, serverTime = null) {
+function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgId, isPrivate = false, serverTime = null, replyData = null, reactionsData = null) {
     const targetBoxId = isPrivate ? 'private-chat-box' : 'chat-box';
     const chatBox = document.getElementById(targetBoxId);
     if (!chatBox) return;
 
-    // منع تكرار الرسالة إذا كانت موجودة بالفعل في الواجهة
     const existingId = (isPrivate ? 'msg-private-' : 'msg-') + msgId;
     if (document.getElementById(existingId)) return;
 
-    // --- معالجة الوقت: نعتمد على وقت السيرفر المخزن في قاعدة البيانات ---
-    // إذا لم يتوفر (رسالة جديدة فورية)، نستخدم وقت الجهاز الحالي كبديل لحظي
     const dateObj = serverTime ? new Date(serverTime) : new Date();
     const timeString = dateObj.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: true });
-    const dateString = dateObj.toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' });
 
-    // إنشاء حاوية الرسالة
     const msgDiv = document.createElement('div');
     msgDiv.className = 'message';
     msgDiv.id = existingId;
     msgDiv.style.alignSelf = isMine ? 'flex-end' : 'flex-start';
     msgDiv.style.position = 'relative';
     msgDiv.style.marginBottom = '18px';
-    msgDiv.style.maxWidth = '85%';
-    msgDiv.style.display = 'flex';
-    msgDiv.style.flexDirection = 'column';
+    msgDiv.style.transition = "transform 0.2s ease";
 
-    // تنسيق شكل الفقاعة (ملصق أو نص)
+    // --- ميزة الرد والسحب ---
+    let startX = 0;
+    msgDiv.addEventListener('touchstart', (e) => { startX = e.touches[0].clientX; }, {passive: true});
+    msgDiv.addEventListener('touchmove', (e) => {
+        let moveX = e.touches[0].clientX - startX;
+        if (moveX < -50) { 
+            msgDiv.style.transform = `translateX(${moveX}px)`;
+            if (moveX < -80) { setReply(sender, content, msgId); msgDiv.style.transform = "translateX(0)"; }
+        }
+    }, {passive: true});
+    msgDiv.addEventListener('touchend', () => { msgDiv.style.transform = "translateX(0)"; });
+
+    // --- ظهور أدوات التحكم والتفاعلات عند التحويم ---
+    msgDiv.onmouseenter = () => {
+        if(!msgDiv.querySelector('.quick-reply-btn')) {
+            const btn = document.createElement('span');
+            btn.innerHTML = "↩️";
+            btn.className = "quick-reply-btn";
+            btn.style = `position:absolute; ${isMine ? 'right:-35px' : 'left:-35px'}; top:50%; transform:translateY(-50%); cursor:pointer; font-size:1.2rem;`;
+            btn.onclick = () => setReply(sender, content, msgId);
+            msgDiv.appendChild(btn);
+        }
+
+        if(!msgDiv.querySelector('.reaction-picker-fast')) {
+            const picker = document.createElement('div');
+            picker.className = 'reaction-picker-fast';
+            picker.style = `position:absolute; top:-40px; ${isMine ? 'left:0' : 'right:0'}; background:#252525; border:1px solid #444; border-radius:20px; padding:5px 10px; display:flex; gap:8px; box-shadow:0 5px 15px rgba(0,0,0,0.5); z-index:100;`;
+            
+            const emojis = ['❤️', '😂', '👍', '🔥', '😮', '😢'];
+            emojis.forEach(emo => {
+                const span = document.createElement('span');
+                span.innerText = emo;
+                span.style = "cursor:pointer; font-size:1.3rem; transition:0.2s;";
+                span.onclick = () => { addReaction(msgId, emo, isPrivate); picker.remove(); };
+                picker.appendChild(span);
+            });
+            msgDiv.appendChild(picker);
+        }
+        const actions = msgDiv.querySelector('.msg-actions');
+        if (actions) actions.style.display = 'flex';
+    };
+
+    msgDiv.onmouseleave = () => {
+        const b = msgDiv.querySelector('.quick-reply-btn'); if(b) b.remove();
+        const p = msgDiv.querySelector('.reaction-picker-fast'); if(p) p.remove();
+        const actions = msgDiv.querySelector('.msg-actions');
+        if (actions) actions.style.display = 'none';
+    };
+
+    // --- تنسيق الفقاعة ---
     if (type === 'sticker') {
         msgDiv.style.background = 'transparent';
-        msgDiv.style.boxShadow = 'none';
     } else {
         msgDiv.style.background = isMine ? 'linear-gradient(135deg, #d4af37, #b8952e)' : '#2a2a2a';
         msgDiv.style.color = isMine ? '#000' : '#fff';
@@ -1366,84 +1470,66 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
         msgDiv.style.boxShadow = '0 4px 15px rgba(0,0,0,0.3)';
     }
 
-    // --- أزرار التحكم (حذف وتعديل) تظهر للمرسل فقط ---
     let controlsHTML = '';
     if (isMine && msgId) {
         controlsHTML = `
-            <div class="msg-actions" style="position:absolute; top:-15px; ${isMine ? 'left:0' : 'right:0'}; display:flex; gap:5px; opacity:0.8;">
+            <div class="msg-actions" style="position:absolute; top:-20px; ${isMine ? 'left:0' : 'right:0'}; display:none; gap:5px; z-index:10;">
                 <button onclick="deleteSingleMessage('${msgId}', '${isPrivate ? 'private' : 'public'}')" 
-                    style="background:#ff4444; color:white; border:none; border-radius:50%; width:20px; height:20px; cursor:pointer; font-size:10px;">✕</button>
-                ${type === 'text' ? `
-                <button onclick="editMessage('${msgId}', '${isPrivate ? 'private' : 'public'}')" 
-                    style="background:#00c851; color:white; border:none; border-radius:50%; width:20px; height:20px; cursor:pointer; font-size:10px;">✏️</button>
-                ` : ''}
+                    style="background:#ff4444; color:white; border:none; border-radius:50%; width:22px; height:22px; cursor:pointer; display:flex; align-items:center; justify-content:center;">✕</button>
+                ${type === 'text' ? `<button onclick="editMessage('${msgId}', '${isPrivate ? 'private' : 'public'}')" 
+                    style="background:#00c851; color:white; border:none; border-radius:50%; width:22px; height:22px; cursor:pointer; display:flex; align-items:center; justify-content:center;">✏️</button>` : ''}
             </div>`;
     }
 
-    // تجهيز المحتوى الداخلي
     let contentHTML = '';
-    
-    // إظهار اسم المرسل
+    if (replyData) {
+        contentHTML += `
+            <div style="background:rgba(0,0,0,0.1); border-right:3px solid var(--primary-color); padding:5px; margin-bottom:8px; font-size:0.75rem; border-radius:5px; cursor:pointer;" onclick="scrollToMessage('${replyData.id}')">
+                <strong style="color:var(--primary-color)">${replyData.to}</strong><br>
+                <span style="opacity:0.8; display:block; overflow:hidden; text-overflow:ellipsis;">${replyData.text}</span>
+            </div>`;
+    }
+
     if (type !== 'sticker') {
         contentHTML += `<div class="message-sender" style="color:${isMine ? 'rgba(0,0,0,0.6)' : color}; font-weight:bold; font-size:0.75rem; margin-bottom:4px;">${sender}</div>`;
     }
 
-    // التعامل مع أنواع الرسائل المختلفة
     switch(type) {
-        case 'text':
-                        const linkedContent = linkify(content);
-            contentHTML += `<div class="msg-text-content" style="word-break:break-word; line-height:1.4;">${linkedContent}</div>`;
-            break;
-        case 'image':
-            contentHTML += `<img src="${content}" style="max-width:100%; border-radius:10px; margin-top:5px;" onload="scrollToBottom()">`;
-            break;
-        case 'video':
-            contentHTML += `<video controls src="${content}" style="max-width:100%; border-radius:10px; margin-top:5px;"></video>`;
-            break;
-        case 'audio':
-            contentHTML += `<audio controls src="${content}" style="width:100%; max-width:210px; height:35px; margin-top:8px;"></audio>`;
-            break;
-        case 'sticker':
-            contentHTML += `<img src="${content}" class="sticker-img" style="width:130px; height:130px; object-fit:contain;" onload="scrollToBottom()">`;
-            break;
+        case 'text': contentHTML += `<div class="msg-text-content">${linkify(content)}</div>`; break;
+        case 'image': contentHTML += `<img src="${content}" style="max-width:100%; border-radius:10px;">`; break;
+        case 'video': contentHTML += `<video controls src="${content}" style="max-width:100%; border-radius:10px;"></video>`; break;
+        case 'audio': contentHTML += `<audio controls src="${content}" style="width:100%; max-width:210px; height:35px;"></audio>`; break;
+        case 'sticker': contentHTML += `<img src="${content}" style="width:130px; height:130px; object-fit:contain;">`; break;
     }
 
-    // إضافة الوقت الثابت في أسفل الفقاعة
-    const timeHTML = `<span class="msg-time" style="font-size:0.6rem; margin-top:6px; opacity:0.6; align-self:flex-start; direction:ltr;">
-        ${dateString} | ${timeString}
-    </span>`;
-
-    // تركيب الرسالة
-    msgDiv.innerHTML = controlsHTML + contentHTML + timeHTML;
-    
-    // إضافة الرسالة للصندوق
+    msgDiv.innerHTML = controlsHTML + contentHTML + `<span class="msg-time" style="font-size:0.6rem; margin-top:6px; opacity:0.6; display:block; text-align:left;">${timeString}</span>`;
     chatBox.appendChild(msgDiv);
-    scrollToBottom();
 
-    // --- نظام الحذف التلقائي للرسائل العامة (المؤقت) ---
+    // --- القسم الذي تم إصلاحه: رسم التفاعلات المخزنة ---
+    const reactionsDiv = document.createElement('div');
+    reactionsDiv.className = 'message-reactions';
+    reactionsDiv.id = `reacts-${existingId}`;
+    reactionsDiv.style.justifyContent = isMine ? 'flex-end' : 'flex-start';
+    chatBox.appendChild(reactionsDiv);
+
+    // التأكد من استخدام reactionsData القادم من السيرفر بشكل صحيح
+    if (reactionsData) {
+        renderReactions(reactionsDiv, reactionsData, msgId, isPrivate);
+    }
+
+    // --- نظام المؤقت ---
     if (appSettings.timerEnabled && !isHistory && !isPrivate) {
-        // إضافة شريط التقدم الزمني
         const progress = document.createElement('div');
-        progress.style.cssText = `height:2px; background:rgba(0,0,0,0.1); width:100%; position:absolute; bottom:0; left:0;`;
+        progress.style.cssText = `height:2px; background:rgba(0,0,0,0.2); width:100%; position:absolute; bottom:0; left:0;`;
         msgDiv.appendChild(progress);
-        
-        setTimeout(() => {
-            progress.style.transition = `width ${appSettings.deleteSeconds}s linear`;
-            progress.style.width = '0%';
-        }, 100);
-
+        setTimeout(() => { progress.style.transition = `width ${appSettings.deleteSeconds}s linear`; progress.style.width = '0%'; }, 100);
         setTimeout(async () => {
-            msgDiv.style.transition = '0.4s';
             msgDiv.style.opacity = '0';
-            msgDiv.style.transform = 'translateX(20px)';
             setTimeout(() => { if(msgDiv.parentNode) msgDiv.remove(); }, 400);
-            
-            // الحذف من قاعدة البيانات للمرسل فقط
-            if (isMine && msgId) {
-                await supabaseClient.from('messages').delete().eq('id', msgId);
-            }
+            if (isMine && msgId) await supabaseClient.from('messages').delete().eq('id', msgId);
         }, appSettings.deleteSeconds * 1000);
     }
+    scrollToBottom();
 }
 
 
@@ -1979,6 +2065,81 @@ function linkify(text) {
     });
 }
 
+function setReply(user, text, id) {
+    replyToData = { user, text, id };
+    const previews = document.querySelectorAll('#reply-preview');
+    previews.forEach(p => {
+        p.style.display = 'block';
+        p.querySelector('#reply-user').innerText = "الرد على: " + user;
+        p.querySelector('#reply-text').innerText = text;
+    });
+    const inp = currentChatTarget === 'private' ? document.getElementById('private-msg-input') : document.getElementById('msg-input');
+    if(inp) inp.focus();
+}
+
+function cancelReply() {
+    replyToData = null;
+    document.querySelectorAll('#reply-preview').forEach(p => p.style.display = 'none');
+}
+
+function scrollToMessage(msgId) {
+    const target = document.getElementById('msg-' + msgId) || document.getElementById('msg-private-' + msgId);
+    if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.style.filter = "brightness(1.5)"; // تأثير الوميض
+        setTimeout(() => { target.style.filter = "none"; }, 1500);
+    }
+}
+// دالة إضافة تفاعل (إيموجي)
+async function addReaction(msgId, emoji, isPrivate) {
+    const table = isPrivate ? 'private_messages' : 'messages';
+    
+    // 1. جلب التفاعلات الحالية من السيرفر
+    let { data } = await supabaseClient.from(table).select('reactions').eq('id', msgId).single();
+    let reactionsMap = data?.reactions || {}; 
+    // هيكل البيانات سيكون: { "❤️": ["user1", "user2"], "😂": ["user3"] }
+
+    // 2. إزالة اسم المستخدم من أي تفاعل سابق في هذه الرسالة (لضمان تفاعل واحد فقط)
+    for (let key in reactionsMap) {
+        reactionsMap[key] = reactionsMap[key].filter(u => u !== username);
+        if (reactionsMap[key].length === 0) delete reactionsMap[key];
+    }
+
+    // 3. إضافة اسم المستخدم للتفاعل الجديد
+    if (!reactionsMap[emoji]) reactionsMap[emoji] = [];
+    reactionsMap[emoji].push(username);
+    
+    // 4. تحديث قاعدة البيانات
+    await supabaseClient.from(table).update({ reactions: reactionsMap }).eq('id', msgId);
+}
+
+// دالة عرض التفاعلات أسفل الرسالة
+function renderReactions(container, reactions, msgId, isPrivate) {
+    if (!reactions || typeof reactions !== 'object') {
+        container.innerHTML = '';
+        return;
+    }
+    
+    container.innerHTML = '';
+    // Reactions هنا عبارة عن كائن يحتوي على مصفوفات أسماء
+    for (const [emoji, usersArray] of Object.entries(reactions)) {
+        if (Array.isArray(usersArray) && usersArray.length > 0) {
+            const badge = document.createElement('div');
+            badge.className = 'reaction-badge';
+            // إظهار الإيموجي + عدد الأسماء داخل المصفوفة
+            badge.innerHTML = `${emoji} ${usersArray.length}`;
+            
+            // تمييز التفاعل إذا كان المستخدم الحالي هو من قام به
+            if (usersArray.includes(username)) {
+                badge.style.borderColor = "var(--primary-color)";
+                badge.style.background = "rgba(212, 175, 55, 0.1)";
+            }
+
+            badge.onclick = () => addReaction(msgId, emoji, isPrivate);
+            container.appendChild(badge);
+        }
+    }
+}
 
 </script></body>
 
