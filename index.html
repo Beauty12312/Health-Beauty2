@@ -9,14 +9,25 @@
 
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><style>
-/* حاوية التفاعلات أسفل الرسالة */
+/* --- حاوية التفاعلات المحسنة --- */
 .message-reactions {
     display: flex;
+    flex-wrap: wrap;
     gap: 4px;
-    margin-top: -12px; /* لكي تلتصق بالرسالة من الأسفل */
+    margin-top: -12px; /* لرفعها لتلتصق بالفقاعة */
     margin-bottom: 10px;
-    padding-right: 15px; /* لتبدأ من جهة اليمين */
-    z-index: 5;
+    z-index: 10;
+    position: relative;
+    padding: 0 45px; /* لترك مساحة لصورة المستخدم */
+}
+
+/* محاذاة التفاعلات حسب صاحب الرسالة */
+.message[style*="row-reverse"] + .message-reactions {
+    justify-content: flex-end; /* لرسائلك (يمين) */
+}
+
+.message[style*="row"] + .message-reactions {
+    justify-content: flex-start; /* لرسائل الآخرين (يسار) */
 }
 
 .reaction-badge {
@@ -28,9 +39,15 @@
     cursor: pointer;
     box-shadow: 0 2px 5px rgba(0,0,0,0.5);
     transition: 0.2s;
+    display: flex;
+    align-items: center;
 }
 
-.reaction-badge:hover { transform: scale(1.1); background: #333; }
+.reaction-badge:hover { 
+    transform: scale(1.1); 
+    background: #333; 
+    border-color: var(--primary-color);
+}
 
 
 :root {
@@ -234,6 +251,156 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
     text-align: right;
 }
 
+#change-photo-btn {
+    transition: transform 0.2s, filter 0.2s;
+}
+#change-photo-btn:hover {
+    transform: scale(1.2);
+    filter: drop-shadow(0 0 5px #ff47bc);
+}
+
+/* --- اذهب إلى نهاية قسم style وضع الكود هنا --- */
+
+#change-photo-btn:hover {
+    transform: scale(1.2);
+    filter: drop-shadow(0 0 5px #ff47bc);
+}
+
+/* --- أضف الأكواد التالية هنا بدقة --- */
+
+.reaction-badge {
+    background: #333;
+    border: 1px solid #444;
+    border-radius: 15px;
+    padding: 2px 10px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: 0.2s all;
+    color: #fff;
+    user-select: none;
+    position: relative;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
+.reaction-badge:hover {
+    transform: translateY(-2px);
+    background: #444;
+    border-color: var(--primary-color);
+}
+
+/* تحسين مكان حاوية التفاعلات لتبدأ من تحت الفقاعة مباشرة بجانب الصورة */
+./* تحسين مكان حاوية التفاعلات لتبدأ من تحت الفقاعة مباشرة بجانب الصورة */
+.message-reactions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: -10px; /* سحب التفاعلات للأعلى لتلتصق بالفقاعة */
+    margin-bottom: 10px;
+    z-index: 10;
+    position: relative;
+    /* هذا السطر يضمن عدم تداخلها مع الصورة */
+    padding: 0 45px; 
+}
+
+/* محاذاة التفاعلات لليمين في رسائلك ولليسار في رسائل الآخرين */
+.message[style*="row-reverse"] + .message-reactions {
+    justify-content: flex-end;
+}
+
+.message[style*="row"] + .message-reactions {
+    justify-content: flex-start;
+}
+
+/* نافذة أسماء المتفاعلين */
+   .reaction-tooltip {
+    position: absolute;
+    bottom: 120%; /* رفعناها أكثر لتبعد عن الفقاعة */
+    left: 50%;
+    transform: translateX(-50%);
+    background: #252525;
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    z-index: 100000; /* قيمة فلكية لضمان الظهور فوق كل شيء */
+    box-shadow: 0 5px 15px rgba(0,0,0,1);
+    border: 1px solid var(--primary-color);
+    display: none; 
+}
+
+
+/* سهم النافذة */
+ .reaction-tooltip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: var(--primary-color) transparent transparent transparent;
+}
+
+/* حاوية دوائر المشاهدة أسفل الرسالة */
+.seen-container {
+    display: flex;
+    gap: 2px;
+    margin-top: -15px;
+    margin-bottom: 10px;
+    padding: 0 45px;
+    height: 16px;
+    align-items: center;
+}
+
+.seen-avatar {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 1px solid var(--bg-dark);
+    object-fit: cover;
+    background: var(--primary-color);
+    font-size: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #000;
+    font-weight: bold;
+}
+
+/* محاذاة لليمين في رسائلك */
+.message[style*="row-reverse"] + .message-reactions + .seen-container {
+    justify-content: flex-end;
+}
+/* محاذاة لليسار في رسائل الآخرين */
+.message[style*="row"] + .message-reactions + .seen-container {
+    justify-content: flex-start;
+}
+
+/* ضمان أن الرسالة لا تخفي العناصر الخارجة عنها (مثل التفاعلات) */
+.message {
+    overflow: visible !important; 
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+/* تنسيق التفاعل الفردي */
+.reaction-badge {
+    background: #252525;
+    border: 1px solid #444;
+    border-radius: 12px;
+    padding: 1px 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 
 </style></head>
 
@@ -316,6 +483,8 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
         <!-- قفل الغرفة الخاص -->
 
         <button class="tool-btn" id="private-lock-btn" title="قسم الموظفين" onclick="openPrivateLock()">🔒</button>
+        
+                <button class="tool-btn" id="change-photo-btn" title="تغيير صورتك الشخصية" style="color: #ff47bc; font-size: 1.0rem;">👤</button>
 
         <button class="tool-btn" onclick="exitChat()">✖</button>
 
@@ -632,6 +801,8 @@ let username = "";
 
 let userColor = "#fff";
 
+let userPhoto = null; //
+
 let currentChatTarget = 'public'; // 'public' or 'private'
 
 let replyToData = null; // لتخزين بيانات الرسالة التي نرد عليها
@@ -831,20 +1002,40 @@ function enterChatMode() {
 async function setUsername() {
     const nameIn = document.getElementById('username-input').value.trim();
     
-    // 1. التحقق من إدخال الاسم
     if (!nameIn) return alert("يجب كتابة اسم!");
 
+    // جلب المنطقة الزمنية الحالية للجهاز (المفتاح السري)
+    const currentTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
     try {
-        // 2. تسجيل دخول الزائر في جدول سجل الزوار (الإضافة الجديدة)
-        await logVisitorEntry(nameIn); 
+        // 1. البحث عن المستخدم في قاعدة البيانات أولاً
+        const { data: existingUser, error: searchError } = await supabaseClient
+            .from('visitor_logs')
+            .select('*')
+            .eq('username', nameIn)
+            .single();
 
-        // 3. تعيين الاسم والمتغيرات الأساسية
-        username = nameIn;
+        if (existingUser) {
+            // 2. فحص الأمان: هل المنطقة الزمنية تتطابق؟
+            if (existingUser.timezone && existingUser.timezone !== currentTimeZone) {
+                alert("🚫 هذا الاسم محجوز! المنطقة الزمنية لا تتطابق مع المالك الأصلي.");
+                return; // منع الدخول
+            }
+            
+            // إذا كان المالك الأصلي: استعادة صورته وبياناته
+            username = nameIn;
+            userPhoto = existingUser.photo_url; // حفظ رابط الصورة في المتغير العام
+        } else {
+            // 3. مستخدم جديد: تسجيل بياناته لأول مرة
+            username = nameIn;
+            userPhoto = null; // لا توجد صورة بعد
+            await logVisitorEntry(nameIn); // سيقوم بحفظ المنطقة الزمنية الحالية له
+        }
+
+        // --- استكمال إجراءات الدخول المعتادة ---
         
-        // توليد لون عشوائي فريد لكل مستخدم بناءً على اسمه
-        userColor = `hsl(${Array.from(nameIn).reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360}, 70%, 60%)`;
+        userColor = `hsl(${Array.from(username).reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360}, 70%, 60%)`;
 
-        // 4. تحديث واجهة المستخدم (إخفاء نافذة الاسم وتفعيل حقل الإدخال)
         document.getElementById('name-modal').style.display = 'none';
         
         const msgInp = document.getElementById('msg-input');
@@ -859,20 +1050,19 @@ async function setUsername() {
             privInp.placeholder = `ارسل الان يا ${username}...`;
         }
 
-        // 5. بدء تشغيل ميزات الدردشة الحية
-        startInactivityTimer();      // بدء مؤقت الخمول
-        loadRecentMessages();        // تحميل الرسائل القديمة
-        startMessageListener();      // البدء في استقبال الرسائل الجديدة فوراً
-        setupPresenceAndTyping();    // تفعيل خاصية "يكتب الآن" وقائمة المتصلين
+        // تشغيل ميزات الدردشة
+        startInactivityTimer();
+        loadRecentMessages();
+        startMessageListener();
+        setupPresenceAndTyping();
 
-        console.log("تم تسجيل الدخول بنجاح لـ:", username);
+        console.log("تم التحقق والدخول بنجاح لـ:", username);
 
     } catch (error) {
-        console.error("حدث خطأ أثناء إعداد المستخدم:", error);
-        alert("عذراً، حدث خطأ في الاتصال بقاعدة البيانات.");
+        console.error("خطأ في التحقق:", error);
+        alert("حدث خطأ أثناء محاولة الدخول.");
     }
 }
-
 
 async function logVisitorEntry(name) {
     if (!supabaseClient) return;
@@ -948,59 +1138,64 @@ function exitChat() { location.reload(); }
 
 
 function setupPresenceAndTyping() {
-
     if(!supabaseClient) return;
 
+    // تعريف قناة الاتصال الموحدة
     presenceChannel = supabaseClient.channel('room_01');
 
     presenceChannel
-
-        .on('presence', { event: 'sync' }, () => { updateOnlineUsersList(presenceChannel.presenceState()); })
-
-        .on('broadcast', { event: 'typing' }, (payload) => {
-
-            if(payload.payload.user !== username) showTypingIndicator(payload.payload.user);
-
+        // 1. تتبع المتصلين (Presence) - لتحديث قائمة المستخدمين النشطين
+        .on('presence', { event: 'sync' }, () => { 
+            updateOnlineUsersList(presenceChannel.presenceState()); 
         })
 
-        .subscribe(async (status) => {
-
-            if (status === 'SUBSCRIBED') {
-
-                await presenceChannel.track({ user: username });
-
+        // 2. استقبال إشارة "يكتب الآن" (Typing) من المستخدمين الآخرين
+        .on('broadcast', { event: 'typing' }, (payload) => {
+            if(payload.payload.user !== username) {
+                showTypingIndicator(payload.payload.user);
             }
+        })
 
+        // 3. استقبال إشارة "تمت المشاهدة" (Seen Receipts) لتحديث دوائر الصور
+        .on('broadcast', { event: 'message_seen' }, (payload) => {
+            if (typeof updateSeenStatus === 'function') {
+                updateSeenStatus(payload.payload.msgId, payload.payload.user, payload.payload.photo);
+            }
+        })
+
+        // بدء الاشتراك الفعلي في القناة
+        .subscribe(async (status) => {
+            if (status === 'SUBSCRIBED') {
+                // تتبع دخول المستخدم الحالي للقناة
+                await presenceChannel.track({ user: username });
+            }
         });
 
+    // دالة إرسال إشارة الكتابة (تُنفذ عند كل ضغطة مفتاح)
     const handleTyping = () => {
-    if(presenceChannel) {
-        presenceChannel.send({
-            type: 'broadcast',
-            event: 'typing',
-            payload: { user: username },
-            config: { method: 'http' } // هذا هو البديل الصحيح والآمن حالياً
-        });
-    }
-    resetInactivityTimer();
-};
-
-
-document.getElementById('msg-input').addEventListener('input', handleTyping);
-document.getElementById('private-msg-input').addEventListener('input', handleTyping);
-
-
-    document.getElementById('private-msg-input').addEventListener('input', () => {
-
-        if(presenceChannel) presenceChannel.send({ type: 'broadcast', event: 'typing', payload: { user: username } });
-
+        if(presenceChannel) {
+            presenceChannel.send({
+                type: 'broadcast',
+                event: 'typing',
+                payload: { user: username },
+                config: { method: 'http' }
+            });
+        }
         resetInactivityTimer();
+    };
 
-    });
+    // ربط الحدث بحقول الإدخال في الدردشة العامة والخاصة
+    const msgInput = document.getElementById('msg-input');
+    const privateMsgInput = document.getElementById('private-msg-input');
 
+    if (msgInput) {
+        msgInput.addEventListener('input', handleTyping);
+    }
+    
+    if (privateMsgInput) {
+        privateMsgInput.addEventListener('input', handleTyping);
+    }
 }
-
-
 
 function updateOnlineUsersList(state) {
 
@@ -1276,6 +1471,7 @@ async function sendMessage(content, type = 'text', finalContent = null) {
         const table = currentChatTarget === 'private' ? 'private_messages' : 'messages';
         await supabaseClient.from(table).insert([{ 
             sender_name: username, 
+       reactions: userPhoto, //   
             content: msgToSend, 
             type: msgType, // هنا يتم حفظ النوع (sticker أو text) في قاعدة البيانات
             color: userColor,
@@ -1303,30 +1499,40 @@ function startMessageListener() {
                     false, 
                     payload.new.id, 
                     tableName === 'private_messages',
-                    payload.new.created_at, // الفاصلة المصححة هنا
-                    payload.new.reply_to,   // المعامل العاشر للرد
+                    payload.new.created_at,
+                    payload.new.reply_to,
                     payload.new.reactions
                 );
+
+                // إرسال إشارة "تمت المشاهدة" للآخرين فور استلام رسالة جديدة
+                if (payload.new.sender_name !== username && presenceChannel) {
+                    presenceChannel.send({
+                        type: 'broadcast',
+                        event: 'message_seen',
+                        payload: { msgId: payload.new.id, user: username, photo: userPhoto }
+                    });
+                }
             })
-                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: tableName }, (payload) => {
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: tableName }, (payload) => {
                 const isPrivate = tableName === 'private_messages';
                 const msgId = payload.new.id;
                 const existingId = (isPrivate ? 'msg-private-' : 'msg-') + msgId;
                 
-                // 1. تحديث نص الرسالة إذا تم تعديله
-                const el = document.getElementById(existingId);
-                if (el) {
-                    const textDiv = el.querySelector('.msg-text-content');
-                    if (textDiv && payload.new.type === 'text') textDiv.textContent = payload.new.content;
-                }
-
-                // 2. التحديث المطلوب لحفظ وظهور التفاعلات فوراً
+                // تحديث التفاعلات فوراً عند حدوث تغيير
                 const reactionsDiv = document.getElementById(`reacts-${existingId}`);
                 if (reactionsDiv) {
                     renderReactions(reactionsDiv, payload.new.reactions, msgId, isPrivate);
                 }
-            })
 
+                // تحديث نص الرسالة إذا تم تعديله
+                const el = document.getElementById(existingId);
+                if (el) {
+                    const textDiv = el.querySelector('.msg-text-content');
+                    if (textDiv && payload.new.type === 'text') {
+                        textDiv.innerHTML = linkify(payload.new.content);
+                    }
+                }
+            })
             .on('postgres_changes', { event: 'DELETE', schema: 'public', table: tableName }, (payload) => {
                 const isPrivate = tableName === 'private_messages';
                 const el = document.getElementById((isPrivate ? 'msg-private-' : 'msg-') + payload.old.id);
@@ -1335,6 +1541,7 @@ function startMessageListener() {
             .subscribe();
     });
 }
+
 
 
 // === الرسائل الخاصة ===
@@ -1405,10 +1612,19 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
     const msgDiv = document.createElement('div');
     msgDiv.className = 'message';
     msgDiv.id = existingId;
+    
+    msgDiv.style.display = "flex";
+    msgDiv.style.flexDirection = isMine ? "row-reverse" : "row"; 
+    msgDiv.style.alignItems = "flex-end"; 
     msgDiv.style.alignSelf = isMine ? 'flex-end' : 'flex-start';
     msgDiv.style.position = 'relative';
     msgDiv.style.marginBottom = '18px';
+    msgDiv.style.width = "100%";
     msgDiv.style.transition = "transform 0.2s ease";
+    msgDiv.style.background = "none"; 
+    msgDiv.style.boxShadow = "none";
+    msgDiv.style.padding = "0";
+    msgDiv.style.overflow = "visible"; 
 
     // --- ميزة الرد والسحب ---
     let startX = 0;
@@ -1422,28 +1638,32 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
     }, {passive: true});
     msgDiv.addEventListener('touchend', () => { msgDiv.style.transform = "translateX(0)"; });
 
-    // --- ظهور أدوات التحكم والتفاعلات عند التحويم ---
+    // --- ظهور أدوات التحكم عند التحويم (تم الإصلاح للرسائل الجديدة) ---
     msgDiv.onmouseenter = () => {
+        // الرد السريع
         if(!msgDiv.querySelector('.quick-reply-btn')) {
             const btn = document.createElement('span');
             btn.innerHTML = "↩️";
             btn.className = "quick-reply-btn";
-            btn.style = `position:absolute; ${isMine ? 'right:-35px' : 'left:-35px'}; top:50%; transform:translateY(-50%); cursor:pointer; font-size:1.2rem;`;
+            btn.style = `position:absolute; ${isMine ? 'right:10px' : 'left:10px'}; top:-20px; cursor:pointer; font-size:1.2rem; z-index:1000;`;
             btn.onclick = () => setReply(sender, content, msgId);
             msgDiv.appendChild(btn);
         }
-
+        // قائمة التفاعلات (تم رفع z-index لضمان الظهور في الرسائل الجديدة)
         if(!msgDiv.querySelector('.reaction-picker-fast')) {
             const picker = document.createElement('div');
             picker.className = 'reaction-picker-fast';
-            picker.style = `position:absolute; top:-40px; ${isMine ? 'left:0' : 'right:0'}; background:#252525; border:1px solid #444; border-radius:20px; padding:5px 10px; display:flex; gap:8px; box-shadow:0 5px 15px rgba(0,0,0,0.5); z-index:100;`;
-            
+            picker.style = `position:absolute; top:-45px; ${isMine ? 'left:0' : 'right:0'}; background:#252525; border:1px solid #444; border-radius:20px; padding:5px 10px; display:flex; gap:8px; box-shadow:0 5px 15px rgba(0,0,0,0.5); z-index:2000;`;
             const emojis = ['❤️', '😂', '👍', '🔥', '😮', '😢'];
             emojis.forEach(emo => {
                 const span = document.createElement('span');
                 span.innerText = emo;
-                span.style = "cursor:pointer; font-size:1.3rem; transition:0.2s;";
-                span.onclick = () => { addReaction(msgId, emo, isPrivate); picker.remove(); };
+                span.style = "cursor:pointer; font-size:1.3rem; transition:0.2s; display:inline-block;";
+                span.onclick = (e) => { 
+                    e.stopPropagation(); // منع تداخل الأحداث
+                    addReaction(msgId, emo, isPrivate); 
+                    picker.remove(); 
+                };
                 picker.appendChild(span);
             });
             msgDiv.appendChild(picker);
@@ -1459,21 +1679,32 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
         if (actions) actions.style.display = 'none';
     };
 
-    // --- تنسيق الفقاعة ---
+    // --- كود أيقونة الصورة الشخصية ---
+    let avatarSrc = (typeof reactionsData === 'string' && reactionsData.startsWith('http')) 
+                    ? reactionsData 
+                    : `https://ui-avatars.com/api/?name=${sender}&background=random&color=fff`;
+
+    const avatarHTML = `
+        <img src="${avatarSrc}" 
+             style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; margin: 0 8px; border: 1px solid rgba(255,255,255,0.1); flex-shrink: 0;"
+             onerror="this.src='https://ui-avatars.com/api/?name=${sender}&background=random'">
+    `;
+
+    // --- تنسيق فقاعة الرسالة الفعلي ---
+    let bubbleStyle = "";
     if (type === 'sticker') {
-        msgDiv.style.background = 'transparent';
+        bubbleStyle = "background:transparent; box-shadow:none;";
     } else {
-        msgDiv.style.background = isMine ? 'linear-gradient(135deg, #d4af37, #b8952e)' : '#2a2a2a';
-        msgDiv.style.color = isMine ? '#000' : '#fff';
-        msgDiv.style.padding = '10px 15px';
-        msgDiv.style.borderRadius = isMine ? '18px 18px 2px 18px' : '18px 18px 18px 2px';
-        msgDiv.style.boxShadow = '0 4px 15px rgba(0,0,0,0.3)';
+        bubbleStyle = isMine 
+            ? "background: linear-gradient(135deg, #d4af37, #b8952e); color: #000; border-radius: 18px 18px 2px 18px;" 
+            : "background: #2a2a2a; color: #fff; border-radius: 18px 18px 18px 2px;";
+        bubbleStyle += " padding: 10px 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);";
     }
 
     let controlsHTML = '';
     if (isMine && msgId) {
         controlsHTML = `
-            <div class="msg-actions" style="position:absolute; top:-20px; ${isMine ? 'left:0' : 'right:0'}; display:none; gap:5px; z-index:10;">
+            <div class="msg-actions" style="position:absolute; top:-20px; ${isMine ? 'left:40px' : 'right:40px'}; display:none; gap:5px; z-index:10;">
                 <button onclick="deleteSingleMessage('${msgId}', '${isPrivate ? 'private' : 'public'}')" 
                     style="background:#ff4444; color:white; border:none; border-radius:50%; width:22px; height:22px; cursor:pointer; display:flex; align-items:center; justify-content:center;">✕</button>
                 ${type === 'text' ? `<button onclick="editMessage('${msgId}', '${isPrivate ? 'private' : 'public'}')" 
@@ -1484,15 +1715,24 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
     let contentHTML = '';
     if (replyData) {
         contentHTML += `
-            <div style="background:rgba(0,0,0,0.1); border-right:3px solid var(--primary-color); padding:5px; margin-bottom:8px; font-size:0.75rem; border-radius:5px; cursor:pointer;" onclick="scrollToMessage('${replyData.id}')">
-                <strong style="color:var(--primary-color)">${replyData.to}</strong><br>
-                <span style="opacity:0.8; display:block; overflow:hidden; text-overflow:ellipsis;">${replyData.text}</span>
+            <div style="background: rgba(0,0,0,0.1); 
+                        border-right: 3px solid var(--primary-color); 
+                        padding: 8px; 
+                        margin-bottom: 8px; 
+                        font-size: 0.75rem; 
+                        border-radius: 8px; 
+                        cursor: pointer; 
+                        word-break: break-word; 
+                        white-space: normal; 
+                        display: block; 
+                        max-width: 100%;" 
+                 onclick="scrollToMessage('${replyData.id}')">
+                <strong style="color:var(--primary-color); display: block; margin-bottom: 2px;">${replyData.to}</strong>
+                <span style="opacity: 0.8; line-height: 1.4;">${replyData.text}</span>
             </div>`;
     }
 
-    if (type !== 'sticker') {
-        contentHTML += `<div class="message-sender" style="color:${isMine ? 'rgba(0,0,0,0.6)' : color}; font-weight:bold; font-size:0.75rem; margin-bottom:4px;">${sender}</div>`;
-    }
+    contentHTML += `<div class="message-sender" style="color:${isMine ? 'rgba(0,0,0,0.6)' : color}; font-weight:bold; font-size:0.75rem; margin-bottom:4px;">${sender}</div>`;
 
     switch(type) {
         case 'text': contentHTML += `<div class="msg-text-content">${linkify(content)}</div>`; break;
@@ -1502,26 +1742,46 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
         case 'sticker': contentHTML += `<img src="${content}" style="width:130px; height:130px; object-fit:contain;">`; break;
     }
 
-    msgDiv.innerHTML = controlsHTML + contentHTML + `<span class="msg-time" style="font-size:0.6rem; margin-top:6px; opacity:0.6; display:block; text-align:left;">${timeString}</span>`;
+    msgDiv.innerHTML = avatarHTML + `
+        <div style="display:flex; flex-direction:column; max-width:75%; align-items: ${isMine ? 'flex-end' : 'flex-start'};">
+            ${controlsHTML}
+            <div style="${bubbleStyle} position:relative;">
+                ${contentHTML}
+            </div>
+            <span class="msg-time" style="font-size:0.6rem; margin-top:4px; opacity:0.6; display:block;">${timeString}</span>
+        </div>`;
+
     chatBox.appendChild(msgDiv);
 
-    // --- القسم الذي تم إصلاحه: رسم التفاعلات المخزنة ---
+    // --- القسم الخاص بالتفاعلات ---
     const reactionsDiv = document.createElement('div');
     reactionsDiv.className = 'message-reactions';
     reactionsDiv.id = `reacts-${existingId}`;
+    reactionsDiv.style.display = 'flex'; 
+    reactionsDiv.style.position = 'relative';
+    reactionsDiv.style.zIndex = '5';
+    reactionsDiv.style.marginTop = '-12px'; 
     reactionsDiv.style.justifyContent = isMine ? 'flex-end' : 'flex-start';
+    reactionsDiv.style.marginRight = isMine ? "48px" : "0";
+    reactionsDiv.style.marginLeft = isMine ? "0" : "48px";
     chatBox.appendChild(reactionsDiv);
 
-    // التأكد من استخدام reactionsData القادم من السيرفر بشكل صحيح
-    if (reactionsData) {
+    if (reactionsData && typeof reactionsData === 'object') {
         renderReactions(reactionsDiv, reactionsData, msgId, isPrivate);
     }
+
+    // --- حاوية "تمت المشاهدة" ---
+    const seenDiv = document.createElement('div');
+    seenDiv.className = 'seen-container';
+    seenDiv.id = isPrivate ? `seen-msg-private-${msgId}` : `seen-msg-${msgId}`;
+    chatBox.appendChild(seenDiv);
 
     // --- نظام المؤقت ---
     if (appSettings.timerEnabled && !isHistory && !isPrivate) {
         const progress = document.createElement('div');
         progress.style.cssText = `height:2px; background:rgba(0,0,0,0.2); width:100%; position:absolute; bottom:0; left:0;`;
-        msgDiv.appendChild(progress);
+        const bubble = msgDiv.querySelector('div[style*="border-radius"]');
+        if(bubble) bubble.appendChild(progress);
         setTimeout(() => { progress.style.transition = `width ${appSettings.deleteSeconds}s linear`; progress.style.width = '0%'; }, 100);
         setTimeout(async () => {
             msgDiv.style.opacity = '0';
@@ -2115,31 +2375,116 @@ async function addReaction(msgId, emoji, isPrivate) {
 
 // دالة عرض التفاعلات أسفل الرسالة
 function renderReactions(container, reactions, msgId, isPrivate) {
-    if (!reactions || typeof reactions !== 'object') {
+    if (!reactions || typeof reactions !== 'object' || Object.keys(reactions).length === 0) {
         container.innerHTML = '';
+        container.style.display = 'none'; // سطر مضاف لضمان إخفاء الحاوية إذا كانت فارغة
         return;
     }
     
+    container.style.display = 'flex'; // سطر مضاف لضمان ظهور الحاوية فور وجود بيانات
     container.innerHTML = '';
-    // Reactions هنا عبارة عن كائن يحتوي على مصفوفات أسماء
     for (const [emoji, usersArray] of Object.entries(reactions)) {
         if (Array.isArray(usersArray) && usersArray.length > 0) {
             const badge = document.createElement('div');
             badge.className = 'reaction-badge';
-            // إظهار الإيموجي + عدد الأسماء داخل المصفوفة
-            badge.innerHTML = `${emoji} ${usersArray.length}`;
+            badge.style.position = 'relative'; 
+            badge.style.display = 'flex'; // لضمان ظهور التفاعل كعنصر مرئي
+            badge.style.alignItems = 'center';
+
+            // 1. إنشاء حاوية الأسماء (Tooltip)
+            const tooltip = document.createElement('div');
+            tooltip.className = 'reaction-tooltip';
+            tooltip.innerText = usersArray.join('، ');
             
-            // تمييز التفاعل إذا كان المستخدم الحالي هو من قام به
+            // 2. إنشاء محتوى التفاعل (الإيموجي والعدد)
+            const contentSpan = document.createElement('span');
+            contentSpan.innerHTML = `${emoji} <span style="font-size:0.75rem; margin-right:2px;">${usersArray.length}</span>`;
+
+            // 3. إضافة العناصر للـ Badge بالترتيب
+            badge.appendChild(tooltip);
+            badge.appendChild(contentSpan);
+
+            // 4. ميزة النقر لإظهار الأسماء
+            badge.onclick = (e) => {
+                e.stopPropagation(); 
+                
+                // إغلاق أي نوافذ مفتوحة أخرى أولاً
+                document.querySelectorAll('.reaction-tooltip').forEach(t => t.style.display = 'none');
+                
+                // إظهار هذه النافذة
+                tooltip.style.display = 'block';
+                
+                // إخفاء تلقائي بعد 3 ثوانٍ
+                setTimeout(() => { tooltip.style.display = 'none'; }, 3000);
+            };
+
+            // تمييز التفاعل الخاص بك
             if (usersArray.includes(username)) {
                 badge.style.borderColor = "var(--primary-color)";
-                badge.style.background = "rgba(212, 175, 55, 0.1)";
+                badge.style.background = "rgba(212, 175, 55, 0.2)";
+                badge.style.boxShadow = "0 0 5px var(--primary-color)";
             }
 
-            badge.onclick = () => addReaction(msgId, emoji, isPrivate);
             container.appendChild(badge);
         }
     }
 }
+
+
+document.getElementById('change-photo-btn').onclick = async () => {
+    if (!username) return alert("سجل دخولك أولاً!");
+    const currentTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    const { data: user } = await supabaseClient.from('visitor_logs').select('timezone').eq('username', username).single();
+
+    if (user && user.timezone === currentTimeZone) {
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file'; fileInput.accept = 'image/*';
+        fileInput.onchange = async (e) => {
+            const file = e.target.files[0];
+            const filePath = `avatars/${Date.now()}_${username}`;
+            const { data } = await supabaseClient.storage.from(MEDIA_BUCKET_NAME).upload(filePath, file);
+            const { data: urlData } = supabaseClient.storage.from(MEDIA_BUCKET_NAME).getPublicUrl(filePath);
+            
+            await supabaseClient.from('visitor_logs').update({ photo_url: urlData.publicUrl }).eq('username', username);
+            userPhoto = urlData.publicUrl;
+            alert("تم التحديث! سيتم تطبيق صورتك الجديدة في الرسائل القادمة.");
+            location.reload();
+        };
+        fileInput.click();
+    } else {
+        alert("🚫 لا يمكنك تغيير الصورة؛ لست المالك الأصلي.");
+    }
+};
+
+// دالة لتحديث دائرة المشاهدة
+function updateSeenStatus(msgId, viewerName, viewerPhoto) {
+    // التصحيح: استهداف الـ IDs التي تنشئها دالة appendMessageToUI فعلياً
+    const publicId = `seen-msg-${msgId}`;
+    const privateId = `seen-msg-private-${msgId}`;
+    const container = document.getElementById(publicId) || document.getElementById(privateId);
+    
+    if (!container) return;
+
+    // ميزة الماسنجر: حذف صورة الشخص من أي رسالة قديمة لكي تظهر في أحدث رسالة فقط
+    const oldSeen = document.querySelectorAll(`[id^="seen-by-${viewerName}"]`);
+    oldSeen.forEach(el => el.remove());
+
+    const seenBall = document.createElement('div');
+    seenBall.id = `seen-by-${viewerName}-${msgId}`;
+    seenBall.className = 'seen-avatar';
+    
+    if (viewerPhoto && viewerPhoto.startsWith('http')) {
+        seenBall.innerHTML = `<img src="${viewerPhoto}" class="seen-avatar" style="margin:0; width:100%; height:100%;" title="شاهدها ${viewerName}">`;
+    } else {
+        const initial = viewerName.charAt(0).toUpperCase();
+        seenBall.innerText = initial;
+        seenBall.title = `شاهدها ${viewerName}`;
+    }
+    
+    container.appendChild(seenBall);
+}
+
 
 </script></body>
 
