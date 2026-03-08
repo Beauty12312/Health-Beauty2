@@ -1008,7 +1008,6 @@ function enterChatMode() {
 
 async function setUsername() {
     const nameIn = document.getElementById('username-input').value.trim();
-    
     if (!nameIn) return alert("يجب كتابة اسم!");
 
     const currentTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -1021,36 +1020,32 @@ async function setUsername() {
             .single();
 
         if (existingUser) {
-            // --- التعديل هنا ---
-            // نمنع الدخول فقط إذا كان "الدخول الآمن" مفعلاً في الإعدادات
+            // حماية الأسماء: التحقق من المنطقة الزمنية
             if (appSettings.secureLoginEnabled && existingUser.timezone && existingUser.timezone !== currentTimeZone) {
                 alert("🚫 هذا الاسم محجوز! حماية الأسماء مفعلة ولا يمكنك الدخول من هذه المنطقة.");
                 return; 
             }
-            // ------------------
             
             username = nameIn;
-            userPhoto = existingUser.photo_url; 
+            // استعادة الصورة المخزنة سابقاً
+            userPhoto = existingUser.photo_url || null; 
+            
+            // تحديث وقت الدخول فقط دون المساس بالصورة
+            await logVisitorEntry(nameIn, userPhoto); 
         } else {
             username = nameIn;
             userPhoto = null;
-            await logVisitorEntry(nameIn); 
+            await logVisitorEntry(nameIn, null); 
         }
 
         userColor = `hsl(${Array.from(username).reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360}, 70%, 60%)`;
         document.getElementById('name-modal').style.display = 'none';
         
+        // تفعيل الحقول
         const msgInp = document.getElementById('msg-input');
-        if (msgInp) {
-            msgInp.disabled = false;
-            msgInp.placeholder = `رسالة من ${username}...`;
-        }
-
+        if (msgInp) { msgInp.disabled = false; msgInp.placeholder = `رسالة من ${username}...`; }
         const privInp = document.getElementById('private-msg-input');
-        if (privInp) {
-            privInp.disabled = false;
-            privInp.placeholder = `ارسل الان يا ${username}...`;
-        }
+        if (privInp) { privInp.disabled = false; privInp.placeholder = `ارسل الان يا ${username}...`; }
 
         startInactivityTimer();
         loadRecentMessages();
@@ -1063,13 +1058,11 @@ async function setUsername() {
 }
 
 
-async function logVisitorEntry(name) {
+async function logVisitorEntry(name, currentPhoto) {
     if (!supabaseClient) return;
     
     const now = new Date();
-    const entryTimeISO = now.toISOString(); // الوقت العالمي
-    
-    // جلب المنطقة الزمنية للزائر (مثلاً: Asia/Baghdad)
+    const entryTimeISO = now.toISOString();
     const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
     try {
@@ -1077,7 +1070,8 @@ async function logVisitorEntry(name) {
             { 
                 username: name, 
                 entry_time: entryTimeISO,
-                timezone: userTimeZone // سنخزن المنطقة الزمنية أيضاً
+                timezone: userTimeZone,
+                photo_url: currentPhoto // إرسال الصورة الحالية لمنع مسحها
             }, 
             { onConflict: 'username' } 
         );
@@ -1466,17 +1460,20 @@ async function sendMessage(content, type = 'text', finalContent = null) {
         replyContext = { to: replyToData.user, text: replyToData.text, id: replyToData.id };
     }
 
-    if(supabaseClient) {
-        const table = currentChatTarget === 'private' ? 'private_messages' : 'messages';
-        await supabaseClient.from(table).insert([{ 
-            sender_name: username, 
-       reactions: userPhoto, //   
-            content: msgToSend, 
-            type: msgType, // هنا يتم حفظ النوع (sticker أو text) في قاعدة البيانات
-            color: userColor,
-            reply_to: replyContext 
-        }]);
-    }
+// ابحث عن هذا الجزء داخل دالة sendMessage واستبدله:
+if(supabaseClient) {
+    const table = currentChatTarget === 'private' ? 'private_messages' : 'messages';
+    await supabaseClient.from(table).insert([{ 
+        sender_name: username, 
+        content: msgToSend, 
+        type: msgType, 
+        color: userColor,
+        reply_to: replyContext,
+        user_avatar: userPhoto, // تخزين الصورة هنا
+        reactions: {} // إبقاء التفاعلات ككائن فارغ
+    }]);
+}
+
     cancelReply(); 
     resetInactivityTimer();
 }
@@ -1500,7 +1497,8 @@ function startMessageListener() {
                     tableName === 'private_messages',
                     payload.new.created_at,
                     payload.new.reply_to,
-                    payload.new.reactions
+                    payload.new.reactions,
+                    payload.new.user_avatar
                 );
 
                 // إرسال إشارة "تمت المشاهدة" للآخرين فور استلام رسالة جديدة
@@ -1597,7 +1595,7 @@ function startPrivateMessageListener() {
 
 
 
-function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgId, isPrivate = false, serverTime = null, replyData = null, reactionsData = null) {
+function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgId, isPrivate = false, serverTime = null, replyData = null, reactionsData = null, userAvatarFromDB = null) {
     const targetBoxId = isPrivate ? 'private-chat-box' : 'chat-box';
     const chatBox = document.getElementById(targetBoxId);
     if (!chatBox) return;
@@ -1625,7 +1623,7 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
     msgDiv.style.padding = "0";
     msgDiv.style.overflow = "visible"; 
 
-    // --- ميزة الرد والسحب ---
+    // --- ميزة الرد والسحب (امتياز أصلي) ---
     let startX = 0;
     msgDiv.addEventListener('touchstart', (e) => { startX = e.touches[0].clientX; }, {passive: true});
     msgDiv.addEventListener('touchmove', (e) => {
@@ -1637,9 +1635,8 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
     }, {passive: true});
     msgDiv.addEventListener('touchend', () => { msgDiv.style.transform = "translateX(0)"; });
 
-    // --- ظهور أدوات التحكم عند التحويم (تم الإصلاح للرسائل الجديدة) ---
+    // --- ظهور أدوات التحكم عند التحويم (امتياز أصلي) ---
     msgDiv.onmouseenter = () => {
-        // الرد السريع
         if(!msgDiv.querySelector('.quick-reply-btn')) {
             const btn = document.createElement('span');
             btn.innerHTML = "↩️";
@@ -1648,7 +1645,6 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
             btn.onclick = () => setReply(sender, content, msgId);
             msgDiv.appendChild(btn);
         }
-        // قائمة التفاعلات (تم رفع z-index لضمان الظهور في الرسائل الجديدة)
         if(!msgDiv.querySelector('.reaction-picker-fast')) {
             const picker = document.createElement('div');
             picker.className = 'reaction-picker-fast';
@@ -1659,7 +1655,7 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
                 span.innerText = emo;
                 span.style = "cursor:pointer; font-size:1.3rem; transition:0.2s; display:inline-block;";
                 span.onclick = (e) => { 
-                    e.stopPropagation(); // منع تداخل الأحداث
+                    e.stopPropagation(); 
                     addReaction(msgId, emo, isPrivate); 
                     picker.remove(); 
                 };
@@ -1678,10 +1674,14 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
         if (actions) actions.style.display = 'none';
     };
 
-    // --- كود أيقونة الصورة الشخصية ---
-    let avatarSrc = (typeof reactionsData === 'string' && reactionsData.startsWith('http')) 
-                    ? reactionsData 
-                    : `https://ui-avatars.com/api/?name=${sender}&background=random&color=fff`;
+    // --- كود أيقونة الصورة الشخصية (تم التحديث لدعم الحقل الجديد) ---
+    let avatarSrc = "https://ui-avatars.com/api/?name=" + sender + "&background=random&color=fff";
+    
+    if (userAvatarFromDB && typeof userAvatarFromDB === 'string' && userAvatarFromDB.startsWith('http')) {
+        avatarSrc = userAvatarFromDB; // الأولوية للحقل المخصص الجديد
+    } else if (typeof reactionsData === 'string' && reactionsData.startsWith('http')) {
+        avatarSrc = reactionsData; // التوافق مع الرسائل القديمة
+    }
 
     const avatarHTML = `
         <img src="${avatarSrc}" 
@@ -1752,7 +1752,7 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
 
     chatBox.appendChild(msgDiv);
 
-    // --- القسم الخاص بالتفاعلات ---
+    // --- القسم الخاص بالتفاعلات (تم الإصلاح ليعمل دائماً كـ Object) ---
     const reactionsDiv = document.createElement('div');
     reactionsDiv.className = 'message-reactions';
     reactionsDiv.id = `reacts-${existingId}`;
@@ -1765,7 +1765,7 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
     reactionsDiv.style.marginLeft = isMine ? "0" : "48px";
     chatBox.appendChild(reactionsDiv);
 
-    if (reactionsData && typeof reactionsData === 'object') {
+    if (reactionsData && typeof reactionsData === 'object' && !Array.isArray(reactionsData)) {
         renderReactions(reactionsDiv, reactionsData, msgId, isPrivate);
     }
 
@@ -1775,7 +1775,7 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
     seenDiv.id = isPrivate ? `seen-msg-private-${msgId}` : `seen-msg-${msgId}`;
     chatBox.appendChild(seenDiv);
 
-    // --- نظام المؤقت ---
+    // --- نظام المؤقت (امتياز أصلي) ---
     if (appSettings.timerEnabled && !isHistory && !isPrivate) {
         const progress = document.createElement('div');
         progress.style.cssText = `height:2px; background:rgba(0,0,0,0.2); width:100%; position:absolute; bottom:0; left:0;`;
@@ -2425,25 +2425,44 @@ document.getElementById('change-photo-btn').onclick = async () => {
 
     const { data: user } = await supabaseClient.from('visitor_logs').select('timezone').eq('username', username).single();
 
-    if (user && user.timezone === currentTimeZone) {
+    if (user && (!appSettings.secureLoginEnabled || user.timezone === currentTimeZone)) {
         const fileInput = document.createElement('input');
-        fileInput.type = 'file'; fileInput.accept = 'image/*';
+        fileInput.type = 'file'; 
+        fileInput.accept = 'image/*';
+        
         fileInput.onchange = async (e) => {
             const file = e.target.files[0];
-            const filePath = `avatars/${Date.now()}_${username}`;
-            const { data } = await supabaseClient.storage.from(MEDIA_BUCKET_NAME).upload(filePath, file);
-            const { data: urlData } = supabaseClient.storage.from(MEDIA_BUCKET_NAME).getPublicUrl(filePath);
+            if (!file) return;
+
+            // استخدام اسم ملف فريد لمنع مشاكل الـ Cache
+            const fileExt = file.name.split('.').pop();
+            const filePath = `avatars/${username}_${Date.now()}.${fileExt}`;
             
-            await supabaseClient.from('visitor_logs').update({ photo_url: urlData.publicUrl }).eq('username', username);
-            userPhoto = urlData.publicUrl;
-            alert("تم التحديث! سيتم تطبيق صورتك الجديدة في الرسائل القادمة.");
-            location.reload();
+            try {
+                // رفع الصورة
+                const { data, error } = await supabaseClient.storage.from(MEDIA_BUCKET_NAME).upload(filePath, file);
+                if (error) throw error;
+
+                // جلب الرابط العام
+                const { data: urlData } = supabaseClient.storage.from(MEDIA_BUCKET_NAME).getPublicUrl(filePath);
+                const finalUrl = urlData.publicUrl;
+
+                // تحديث قاعدة البيانات فوراً
+                await supabaseClient.from('visitor_logs').update({ photo_url: finalUrl }).eq('username', username);
+                
+                userPhoto = finalUrl;
+                alert("✅ تم تحديث صورتك بنجاح!");
+                location.reload(); // إعادة التحميل لتطبيق الصورة في كل مكان
+            } catch (err) {
+                alert("فشل الرفع: " + err.message);
+            }
         };
         fileInput.click();
     } else {
-        alert("🚫 لا يمكنك تغيير الصورة؛ لست المالك الأصلي.");
+        alert("🚫 لا يمكنك تغيير الصورة؛ حماية الأسماء تمنعك.");
     }
 };
+
 
 // دالة لتحديث دائرة المشاهدة
 function updateSeenStatus(msgId, viewerName, viewerPhoto) {
