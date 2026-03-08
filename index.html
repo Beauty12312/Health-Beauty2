@@ -762,6 +762,15 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
 
 </div>
 
+<div class="timer-control-group">
+    <label class="checkbox-wrapper">
+        <input type="checkbox" id="secure-login-toggle">
+        تفعيل الدخول الآمن (منع انتحال الأسماء)
+    </label>
+    <p style="font-size: 0.75rem; color: #888; margin-right: 30px; margin-top: 5px;">
+        * عند التفعيل، يتم مطابقة المنطقة الزمنية للجهاز لمنع استخدام اسمك من شخص آخر.
+    </p>
+</div>
 
 
 <div style="border-top: 1px solid #333; margin-top: 15px; padding-top: 15px;">
@@ -956,17 +965,15 @@ window.onload = async function() {
 
 
 function updateLocalSettings(data) {
-
     appSettings = { 
-
-        deleteSeconds: data.delete_seconds, inactivityTimeout: data.inactivity_timeout, 
-
-        entranceCode: data.entrance_code, timerEnabled: data.timer_enabled, 
-
-        inactivityEnabled: data.inactivity_enabled, adminCode: data.admin_code 
-
+        deleteSeconds: data.delete_seconds, 
+        inactivityTimeout: data.inactivity_timeout, 
+        entranceCode: data.entrance_code, 
+        timerEnabled: data.timer_enabled, 
+        inactivityEnabled: data.inactivity_enabled, 
+        adminCode: data.admin_code,
+        secureLoginEnabled: data.secure_login_enabled // السطر المضاف
     };
-
 }
 
 
@@ -1004,11 +1011,9 @@ async function setUsername() {
     
     if (!nameIn) return alert("يجب كتابة اسم!");
 
-    // جلب المنطقة الزمنية الحالية للجهاز (المفتاح السري)
     const currentTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
     try {
-        // 1. البحث عن المستخدم في قاعدة البيانات أولاً
         const { data: existingUser, error: searchError } = await supabaseClient
             .from('visitor_logs')
             .select('*')
@@ -1016,26 +1021,23 @@ async function setUsername() {
             .single();
 
         if (existingUser) {
-            // 2. فحص الأمان: هل المنطقة الزمنية تتطابق؟
-            if (existingUser.timezone && existingUser.timezone !== currentTimeZone) {
-                alert("🚫 هذا الاسم محجوز! المنطقة الزمنية لا تتطابق مع المالك الأصلي.");
-                return; // منع الدخول
+            // --- التعديل هنا ---
+            // نمنع الدخول فقط إذا كان "الدخول الآمن" مفعلاً في الإعدادات
+            if (appSettings.secureLoginEnabled && existingUser.timezone && existingUser.timezone !== currentTimeZone) {
+                alert("🚫 هذا الاسم محجوز! حماية الأسماء مفعلة ولا يمكنك الدخول من هذه المنطقة.");
+                return; 
             }
+            // ------------------
             
-            // إذا كان المالك الأصلي: استعادة صورته وبياناته
             username = nameIn;
-            userPhoto = existingUser.photo_url; // حفظ رابط الصورة في المتغير العام
+            userPhoto = existingUser.photo_url; 
         } else {
-            // 3. مستخدم جديد: تسجيل بياناته لأول مرة
             username = nameIn;
-            userPhoto = null; // لا توجد صورة بعد
-            await logVisitorEntry(nameIn); // سيقوم بحفظ المنطقة الزمنية الحالية له
+            userPhoto = null;
+            await logVisitorEntry(nameIn); 
         }
 
-        // --- استكمال إجراءات الدخول المعتادة ---
-        
         userColor = `hsl(${Array.from(username).reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360}, 70%, 60%)`;
-
         document.getElementById('name-modal').style.display = 'none';
         
         const msgInp = document.getElementById('msg-input');
@@ -1050,19 +1052,16 @@ async function setUsername() {
             privInp.placeholder = `ارسل الان يا ${username}...`;
         }
 
-        // تشغيل ميزات الدردشة
         startInactivityTimer();
         loadRecentMessages();
         startMessageListener();
         setupPresenceAndTyping();
 
-        console.log("تم التحقق والدخول بنجاح لـ:", username);
-
     } catch (error) {
         console.error("خطأ في التحقق:", error);
-        alert("حدث خطأ أثناء محاولة الدخول.");
     }
 }
+
 
 async function logVisitorEntry(name) {
     if (!supabaseClient) return;
@@ -2014,6 +2013,7 @@ function populateSettingsUI() {
     document.getElementById('inactivity-toggle').checked = appSettings.inactivityEnabled;
 
     document.getElementById('admin-code-setting').value = appSettings.adminCode;
+    document.getElementById('secure-login-toggle').checked = appSettings.secureLoginEnabled;
 
     toggleTimerInputState();
 
@@ -2026,46 +2026,34 @@ function closeSettings() { document.getElementById('settings-modal').style.displ
 
 
 async function saveSettings() {
-
     const nt = parseInt(document.getElementById('timer-setting').value);
-
     const ni = parseInt(document.getElementById('inactivity-setting').value);
-
     const nc = document.getElementById('code-setting').value.trim();
-
     const on = document.getElementById('timer-toggle').checked;
-
     const inactOn = document.getElementById('inactivity-toggle').checked;
-
     const ac = document.getElementById('admin-code-setting').value.trim();
-
-
+    
+    // ** السطر المضاف لقراءة حالة المربع الجديد **
+    const secureOn = document.getElementById('secure-login-toggle').checked;
 
     if(supabaseClient) {
-
         await supabaseClient.from('settings').upsert({ 
-
             id: 1, 
-
             delete_seconds: nt, 
-
             inactivity_timeout: ni, 
-
             entrance_code: nc, 
-
             timer_enabled: on,
-
             inactivity_enabled: inactOn,
-
-            admin_code: ac
-
+            admin_code: ac,
+            // ** إضافة القيمة الجديدة هنا ليتم حفظها في قاعدة البيانات **
+            secure_login_enabled: secureOn 
         });
 
-        alert("✅ تم الحفظ"); closeSettings();
-
+        alert("✅ تم الحفظ بنجاح"); 
+        closeSettings();
     }
-
 }
+
 
 
 
