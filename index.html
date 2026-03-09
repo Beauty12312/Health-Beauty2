@@ -632,8 +632,6 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
 
     <button class="tool-btn" id="private-radio-btn" onclick="toggleRadioMenu()" title="اختر محطة راديو">📻</button>
 
-    <button class="tool-btn" onclick="stopRadio()" title="إيقاف الراديو">⏹️</button>
-
     <button class="tool-btn" onclick="toggleStickers()" title="ملصقات">💖</button>
 
     <button class="tool-btn" onclick="toggleEmoji()" title="إيموجي">😀</button>
@@ -846,11 +844,11 @@ const articlesData = {
 
 const radioStations = {
 
-    iraqi: { name: "أغاني عراقية 🇮🇶", url: "https://stream.zeno.fm/0r0xa792kwzuv" },
+    iraqi: { name: "موسيقى  🎼", url: "https://stream.zeno.fm/0r0xa792kwzuv" },
 
     syrian: { name: "شامي / سوري 🇸🇾", url: "https://l3.itworkscdn.net/itwaudio/9030/stream" }, 
-
-    mix: { name: "منوعات عربية 🎶", url: "https://stream.zeno.fm/r2gn1644m0quv" },
+  
+  iraqi4: { name: "راديو بغداد 📻", url: "http://stream.radiojar.com/8s5u5tpdtwzuv" },
 
     foreign: { name: "أغاني أجنبية 🇺🇸", url: "https://stream-mixtape-geo.ntslive.net/mixtape2" }
 
@@ -876,11 +874,34 @@ const stickers = {
 
         "https://media.giphy.com/media/3oEjHAUOqG3lSS0f1C/giphy.gif","https://media.giphy.com/media/10yXFkBJ0MwGQ0/giphy.gif","https://media.giphy.com/media/ZqlvCTNHpqrio/giphy.gif","https://media.giphy.com/media/ltIFdxPB9JhoTpEEt9/giphy.gif",
 
+"https://media.giphy.com/media/3o7aD6fX2kYQwV3pWQ/giphy.gif",
+"https://media.giphy.com/media/5GoVLqeAOo6PK/giphy.gif",
+"https://media.giphy.com/media/1BXa2alBjrCXC/giphy.gif",
+"https://media.giphy.com/media/3o6Zt481isNVuQI1l6/giphy.gif",
+"https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif",
+"https://media.giphy.com/media/10JhviFuU2gWD6/giphy.gif",
+"https://media.giphy.com/media/ICOgUNjpvO0PC/giphy.gif",
+"https://media.giphy.com/media/Q7ozWVYCR0nyW2rvPW/giphy.gif",
+"https://media.giphy.com/media/xT0xeJpnrWC4XWblEk/giphy.gif",
+"https://media.giphy.com/media/9Y5BbDSkSTiY8/giphy.gif",
+
         "https://media.giphy.com/media/3o7aD6fX2kYQwV3pWQ/giphy.gif","https://media.giphy.com/media/5GoVLqeAOo6PK/giphy.gif","https://media.giphy.com/media/1BXa2alBjrCXC/giphy.gif"
+        
 
     ],
 
     sad: [
+
+"https://media.giphy.com/media/d2lcHJTG5Tscg/giphy.gif",
+"https://media.giphy.com/media/ROF8OQvDmxytW/giphy.gif",
+"https://media.giphy.com/media/OPU6wzx8JrHna/giphy.gif",
+"https://media.giphy.com/media/3o6ZsS8GFJKJeJoRQ4/giphy.gif",
+"https://media.giphy.com/media/9Y5BbDSkSTiY8/giphy.gif",
+"https://media.giphy.com/media/26ufcVAp3AiJJsrIs/giphy.gif",
+"https://media.giphy.com/media/l378giAZgxPw3eO52/giphy.gif",
+"https://media.giphy.com/media/ISOckXUybVfQ4/giphy.gif",
+"https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif",
+"https://media.giphy.com/media/8YutMatqkTfSE/giphy.gif",
 
         "https://media.giphy.com/media/OPU6wzx8JrHna/giphy.gif","https://media.giphy.com/media/7SF5scGBwjWWQ/giphy.gif","https://media.giphy.com/media/d2lcHJy5yqgAU/giphy.gif","https://media.giphy.com/media/L95W4wv8nnb9K/giphy.gif"
 
@@ -1013,6 +1034,7 @@ async function setUsername() {
     const currentTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
     try {
+        // 1. البحث عن المستخدم في سجل الزوار
         const { data: existingUser, error: searchError } = await supabaseClient
             .from('visitor_logs')
             .select('*')
@@ -1020,40 +1042,52 @@ async function setUsername() {
             .single();
 
         if (existingUser) {
-            // حماية الأسماء: التحقق من المنطقة الزمنية
+            // 2. حماية الأسماء: التحقق من المنطقة الزمنية إذا كانت الميزة مفعلة
             if (appSettings.secureLoginEnabled && existingUser.timezone && existingUser.timezone !== currentTimeZone) {
                 alert("🚫 هذا الاسم محجوز! حماية الأسماء مفعلة ولا يمكنك الدخول من هذه المنطقة.");
                 return; 
             }
             
             username = nameIn;
-            // استعادة الصورة المخزنة سابقاً
+            // 3. استعادة رابط الصورة الشخصية المخزن مسبقاً في المتغير العام
             userPhoto = existingUser.photo_url || null; 
             
-            // تحديث وقت الدخول فقط دون المساس بالصورة
+            // 4. تحديث وقت الدخول في قاعدة البيانات مع الحفاظ على الصورة
             await logVisitorEntry(nameIn, userPhoto); 
         } else {
+            // حالة مستخدم جديد لأول مرة
             username = nameIn;
             userPhoto = null;
             await logVisitorEntry(nameIn, null); 
         }
 
+        // 5. إعداد لون المستخدم بناءً على اسمه (HSL)
         userColor = `hsl(${Array.from(username).reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360}, 70%, 60%)`;
+        
+        // 6. إغلاق نافذة إدخال الاسم
         document.getElementById('name-modal').style.display = 'none';
         
-        // تفعيل الحقول
+        // 7. تفعيل حقول الإدخال في الدردشة العامة والخاصة
         const msgInp = document.getElementById('msg-input');
-        if (msgInp) { msgInp.disabled = false; msgInp.placeholder = `رسالة من ${username}...`; }
+        if (msgInp) { 
+            msgInp.disabled = false; 
+            msgInp.placeholder = `رسالة من ${username}...`; 
+        }
+        
         const privInp = document.getElementById('private-msg-input');
-        if (privInp) { privInp.disabled = false; privInp.placeholder = `ارسل الان يا ${username}...`; }
+        if (privInp) { 
+            privInp.disabled = false; 
+            privInp.placeholder = `ارسل الان يا ${username}...`; 
+        }
 
+        // 8. تشغيل الأنظمة الفرعية للدردشة
         startInactivityTimer();
         loadRecentMessages();
         startMessageListener();
         setupPresenceAndTyping();
 
     } catch (error) {
-        console.error("خطأ في التحقق:", error);
+        console.error("خطأ في عملية التحقق والدخول:", error);
     }
 }
 
@@ -1387,32 +1421,40 @@ function showStickerCategory(cat, el) {
 
 async function loadRecentMessages() {
     if(!supabaseClient) return;
-    const { data } = await supabaseClient.from('messages').select('*').order('created_at', { ascending: true }).limit(50);
+    
+    // جلب الرسائل من قاعدة البيانات
+    const { data } = await supabaseClient
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .limit(50);
     
     if (data) {
         data.forEach(msg => {
+            // --- الحفاظ على ميزة المؤقت والحذف التلقائي ---
             const msgTime = new Date(msg.created_at).getTime();
             const age = (Date.now() - msgTime) / 1000;
             if (appSettings.timerEnabled && age > appSettings.deleteSeconds) return; 
 
+            // --- استدعاء الدالة مع إضافة حقل الصورة المطلوب ---
             appendMessageToUI(
                 msg.sender_name, 
                 msg.content, 
                 msg.type, 
                 msg.color, 
                 msg.sender_name === username, 
-                true, 
+                true, // history mode
                 msg.id, 
-                false, 
+                false, // isPrivate
                 msg.created_at,
                 msg.reply_to,
-                msg.reactions // المعامل رقم 11 الصحيح
+                msg.reactions, // المعامل رقم 11
+                msg.user_avatar // المطلوب: إضافة صورة المستخدم المحفوظة بجانب رسائله
             );
         });
         scrollToBottom();
     }
 }
-
 
 function handleSendMessageClick() {
 
@@ -1485,6 +1527,7 @@ function startMessageListener() {
 
     ['messages', 'private_messages'].forEach(tableName => {
         supabaseClient.channel(tableName + '-realtime')
+            // --- 1. استلام الرسائل الجديدة (INSERT) ---
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: tableName }, (payload) => {
                 appendMessageToUI(
                     payload.new.sender_name, 
@@ -1492,13 +1535,13 @@ function startMessageListener() {
                     payload.new.type, 
                     payload.new.color, 
                     payload.new.sender_name === username, 
-                    false, 
+                    false, // isHistory (false تعني رسالة جديدة الآن)
                     payload.new.id, 
                     tableName === 'private_messages',
                     payload.new.created_at,
                     payload.new.reply_to,
                     payload.new.reactions,
-                    payload.new.user_avatar
+                    payload.new.user_avatar // المعامل المطلوب لضمان ظهور الصورة فور وصول الرسالة
                 );
 
                 // إرسال إشارة "تمت المشاهدة" للآخرين فور استلام رسالة جديدة
@@ -1506,22 +1549,27 @@ function startMessageListener() {
                     presenceChannel.send({
                         type: 'broadcast',
                         event: 'message_seen',
-                        payload: { msgId: payload.new.id, user: username, photo: userPhoto }
+                        payload: { 
+                            msgId: payload.new.id, 
+                            user: username, 
+                            photo: userPhoto // صورتك الشخصية الحالية
+                        }
                     });
                 }
             })
+            // --- 2. تحديث الرسائل (UPDATE) - للتفاعلات والتعديل ---
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: tableName }, (payload) => {
                 const isPrivate = tableName === 'private_messages';
                 const msgId = payload.new.id;
                 const existingId = (isPrivate ? 'msg-private-' : 'msg-') + msgId;
                 
-                // تحديث التفاعلات فوراً عند حدوث تغيير
+                // تحديث التفاعلات (الإيموجي) فوراً
                 const reactionsDiv = document.getElementById(`reacts-${existingId}`);
                 if (reactionsDiv) {
                     renderReactions(reactionsDiv, payload.new.reactions, msgId, isPrivate);
                 }
 
-                // تحديث نص الرسالة إذا تم تعديله
+                // تحديث نص الرسالة إذا تم تعديله من قبل المرسل
                 const el = document.getElementById(existingId);
                 if (el) {
                     const textDiv = el.querySelector('.msg-text-content');
@@ -1530,6 +1578,7 @@ function startMessageListener() {
                     }
                 }
             })
+            // --- 3. حذف الرسائل (DELETE) ---
             .on('postgres_changes', { event: 'DELETE', schema: 'public', table: tableName }, (payload) => {
                 const isPrivate = tableName === 'private_messages';
                 const el = document.getElementById((isPrivate ? 'msg-private-' : 'msg-') + payload.old.id);
@@ -1538,7 +1587,6 @@ function startMessageListener() {
             .subscribe();
     });
 }
-
 
 
 // === الرسائل الخاصة ===
@@ -1567,33 +1615,35 @@ async function loadRecentPrivateMessages() {
 }
 
 
-function startPrivateMessageListener() {
-
+async function loadRecentPrivateMessages() {
     if(!supabaseClient) return;
+    
+    const { data } = await supabaseClient
+        .from('private_messages')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .limit(200);
 
-    supabaseClient.channel('public:private_messages')
-
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'private_messages' }, (payload) => {
-
-            const { sender_name, content, type, color, id } = payload.new;
-
-            appendMessageToUI(sender_name, content, type, color, sender_name === username, false, id, true);
-
-        })
-
-        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'private_messages' }, (payload) => {
-
-            const el = document.getElementById(`msg-private-${payload.old.id}`);
-
-            if(el) el.remove();
-
-        })
-
-        .subscribe();
-
+    if (data) {
+        data.forEach(msg => {
+            appendMessageToUI(
+                msg.sender_name, 
+                msg.content, 
+                msg.type, 
+                msg.color, 
+                msg.sender_name === username, 
+                true, // isHistory
+                msg.id, 
+                true, // isPrivate
+                msg.created_at,
+                msg.reply_to,
+                msg.reactions, // المعامل رقم 11
+                msg.user_avatar // المعامل رقم 12 (المطلوب لعرض الصورة)
+            );
+        });
+        scrollToBottom();
+    }
 }
-
-
 
 function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgId, isPrivate = false, serverTime = null, replyData = null, reactionsData = null, userAvatarFromDB = null) {
     const targetBoxId = isPrivate ? 'private-chat-box' : 'chat-box';
@@ -1674,13 +1724,16 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
         if (actions) actions.style.display = 'none';
     };
 
-    // --- كود أيقونة الصورة الشخصية (تم التحديث لدعم الحقل الجديد) ---
+    // --- كود أيقونة الصورة الشخصية (تحسين الجلب من قاعدة البيانات) ---
     let avatarSrc = "https://ui-avatars.com/api/?name=" + sender + "&background=random&color=fff";
     
+    // التحقق من وجود الصورة في الحقل المخصص القادم من السيرفر
     if (userAvatarFromDB && typeof userAvatarFromDB === 'string' && userAvatarFromDB.startsWith('http')) {
-        avatarSrc = userAvatarFromDB; // الأولوية للحقل المخصص الجديد
-    } else if (typeof reactionsData === 'string' && reactionsData.startsWith('http')) {
-        avatarSrc = reactionsData; // التوافق مع الرسائل القديمة
+        avatarSrc = userAvatarFromDB; 
+    } 
+    // دعم التوافق مع الأنظمة القديمة
+    else if (typeof reactionsData === 'string' && reactionsData.startsWith('http')) {
+        avatarSrc = reactionsData; 
     }
 
     const avatarHTML = `
@@ -1752,7 +1805,7 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
 
     chatBox.appendChild(msgDiv);
 
-    // --- القسم الخاص بالتفاعلات (تم الإصلاح ليعمل دائماً كـ Object) ---
+    // --- التفاعلات ---
     const reactionsDiv = document.createElement('div');
     reactionsDiv.className = 'message-reactions';
     reactionsDiv.id = `reacts-${existingId}`;
@@ -1769,13 +1822,13 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
         renderReactions(reactionsDiv, reactionsData, msgId, isPrivate);
     }
 
-    // --- حاوية "تمت المشاهدة" ---
+    // --- المشاهدة ---
     const seenDiv = document.createElement('div');
     seenDiv.className = 'seen-container';
     seenDiv.id = isPrivate ? `seen-msg-private-${msgId}` : `seen-msg-${msgId}`;
     chatBox.appendChild(seenDiv);
 
-    // --- نظام المؤقت (امتياز أصلي) ---
+    // --- المؤقت الذكي ---
     if (appSettings.timerEnabled && !isHistory && !isPrivate) {
         const progress = document.createElement('div');
         progress.style.cssText = `height:2px; background:rgba(0,0,0,0.2); width:100%; position:absolute; bottom:0; left:0;`;
@@ -1790,7 +1843,6 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
     }
     scrollToBottom();
 }
-
 
 async function startRecordingMode() {
 
@@ -2420,48 +2472,80 @@ function renderReactions(container, reactions, msgId, isPrivate) {
 
 
 document.getElementById('change-photo-btn').onclick = async () => {
+    // 1. التحقق من تسجيل الدخول
     if (!username) return alert("سجل دخولك أولاً!");
+
     const currentTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-    const { data: user } = await supabaseClient.from('visitor_logs').select('timezone').eq('username', username).single();
+    try {
+        // 2. جلب بيانات المستخدم للتحقق من الصلاحية (المنطقة الزمنية)
+        const { data: user } = await supabaseClient
+            .from('visitor_logs')
+            .select('timezone')
+            .eq('username', username)
+            .single();
 
-    if (user && (!appSettings.secureLoginEnabled || user.timezone === currentTimeZone)) {
-        const fileInput = document.createElement('input');
-        fileInput.type = 'file'; 
-        fileInput.accept = 'image/*';
-        
-        fileInput.onchange = async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            // استخدام اسم ملف فريد لمنع مشاكل الـ Cache
-            const fileExt = file.name.split('.').pop();
-            const filePath = `avatars/${username}_${Date.now()}.${fileExt}`;
+        // 3. التحقق من شروط حماية الأسماء
+        if (user && (!appSettings.secureLoginEnabled || user.timezone === currentTimeZone)) {
             
-            try {
-                // رفع الصورة
-                const { data, error } = await supabaseClient.storage.from(MEDIA_BUCKET_NAME).upload(filePath, file);
-                if (error) throw error;
+            // إنشاء عنصر إدخال ملف مخفي
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'image/*';
 
-                // جلب الرابط العام
-                const { data: urlData } = supabaseClient.storage.from(MEDIA_BUCKET_NAME).getPublicUrl(filePath);
-                const finalUrl = urlData.publicUrl;
+            fileInput.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
 
-                // تحديث قاعدة البيانات فوراً
-                await supabaseClient.from('visitor_logs').update({ photo_url: finalUrl }).eq('username', username);
-                
-                userPhoto = finalUrl;
-                alert("✅ تم تحديث صورتك بنجاح!");
-                location.reload(); // إعادة التحميل لتطبيق الصورة في كل مكان
-            } catch (err) {
-                alert("فشل الرفع: " + err.message);
-            }
-        };
-        fileInput.click();
-    } else {
-        alert("🚫 لا يمكنك تغيير الصورة؛ حماية الأسماء تمنعك.");
+                // إنشاء مسار فريد للملف لتجنب مشاكل الكاش (Cache)
+                const fileExt = file.name.split('.').pop();
+                const filePath = `avatars/${username}_${Date.now()}.${fileExt}`;
+
+                try {
+                    // 4. رفع الصورة إلى Storage
+                    const { data, error } = await supabaseClient.storage
+                        .from(MEDIA_BUCKET_NAME)
+                        .upload(filePath, file);
+
+                    if (error) throw error;
+
+                    // 5. الحصول على الرابط العام للصورة المرفوعة
+                    const { data: urlData } = supabaseClient.storage
+                        .from(MEDIA_BUCKET_NAME)
+                        .getPublicUrl(filePath);
+
+                    const finalUrl = urlData.publicUrl;
+
+                    // 6. تحديث رابط الصورة في جدول بيانات الزوار
+                    await supabaseClient
+                        .from('visitor_logs')
+                        .update({ photo_url: finalUrl })
+                        .eq('username', username);
+
+                    // 7. تحديث المتغير المحلي وإخطار المستخدم
+                    userPhoto = finalUrl;
+                    alert("✅ تم تحديث صورتك بنجاح!");
+                    
+                    // إعادة تحميل الصفحة لتطبيق التغييرات في واجهة الدردشة
+                    location.reload();
+
+                } catch (err) {
+                    alert("فشل الرفع: " + err.message);
+                }
+            };
+
+            fileInput.click();
+
+        } else {
+            // في حال عدم مطابقة المنطقة الزمنية أو تفعيل الحماية
+            alert("🚫 لا يمكنك تغيير الصورة؛ حماية الأسماء تمنعك.");
+        }
+
+    } catch (error) {
+        console.error("خطأ أثناء جلب بيانات المستخدم:", error);
     }
 };
+
 
 
 // دالة لتحديث دائرة المشاهدة
