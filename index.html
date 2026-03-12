@@ -9,6 +9,28 @@
 
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><style>
+/* تنسيق قائمة أسماء المعجبين */
+.likes-tooltip {
+    display: none;
+    position: absolute;
+    bottom: 30px;
+    right: 0;
+    background: #252525;
+    color: #ffd700;
+    padding: 5px 10px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    z-index: 100;
+    border: 1px solid #444;
+    white-space: nowrap;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+}
+
+.moment-likes-container:hover .likes-tooltip {
+    display: block;
+}
+
+
 /* --- حاوية التفاعلات المحسنة --- */
 .message-reactions {
     display: flex;
@@ -484,7 +506,7 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
 
         <button class="tool-btn" id="private-lock-btn" title="قسم الموظفين" onclick="openPrivateLock()">🔒</button>
         
-                <button class="tool-btn" id="change-photo-btn" title="تغيير صورتك الشخصية" style="color: #ff47bc; font-size: 1.0rem;">👤</button>
+                <button class="tool-btn" id="change-photo-btn" title="تغيير صورتك الشخصية" style="color: #ff47bc; font-size: 1.0rem;">🪞</button>
 
         <button class="tool-btn" onclick="exitChat()">✖</button>
 
@@ -599,17 +621,15 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
 
         <button class="tool-btn" onclick="deleteAllPrivateMessages()" title="حذف كل رسائل الموظفين">🗑️</button>
 
-        <button class="tool-btn" onclick="closePrivateChat()" title="خروج">✖</button>
-
     </div>
 
 </div>
 
 <div>
     <button class="tool-btn" onclick="openVisitorLog()" title="سجل الزوار">🕒</button>
+    <button class="tool-btn" id="staff-moments-btn" title="يوميات الموظفين" onclick="openStaffMoments()" style="color: #FFD700; font-size: 1.3rem;">🎞️</button>
     
     <button class="tool-btn" onclick="checkSettingsAccess()">⚙️</button>
-    <button class="tool-btn" id="private-lock-btn" title="قسم الموظفين" onclick="openPrivateLock()">🔒</button>
     <button class="tool-btn" onclick="exitChat()">✖</button>
 </div>
 
@@ -634,7 +654,7 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
 
     <button class="tool-btn" onclick="toggleStickers()" title="ملصقات">💖</button>
 
-    <button class="tool-btn" onclick="toggleEmoji()" title="إيموجي">😀</button>
+    <button class="tool-btn" onclick="toggleEmoji()" title="إيموجي">??</button>
 
     <button class="tool-btn" onclick="triggerPrivateUpload('image')">📷</button>
 
@@ -662,6 +682,7 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
     <input type="text" id="private-msg-input" placeholder="رسالة سرية..." disabled>
 
     <button class="tool-btn" id="private-send-btn" onclick="handleSendMessageClick()" style="color: var(--primary-color); filter: none;">➤</button>
+    
 
 </div>
 
@@ -2576,8 +2597,487 @@ function updateSeenStatus(msgId, viewerName, viewerPhoto) {
     container.appendChild(seenBall);
 }
 
+// --- نظام يوميات الموظفين (Staff Moments) ---
+
+function openStaffMoments() {
+    if (!username) return alert("سجل دخولك أولاً!");
+    document.getElementById('staff-moments-interface').style.display = 'flex';
+    loadMoments();
+}
+
+function closeStaffMoments() {
+    document.getElementById('staff-moments-interface').style.display = 'none';
+}
+
+// 1. معالجة الرفع مع نسبة التحميل (الامتياز المكتسب)
+async function handleMomentUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const progressDiv = document.getElementById('moment-upload-progress');
+    const bar = document.getElementById('moment-progress-bar');
+    const percentText = document.getElementById('moment-percent');
+
+    progressDiv.style.display = 'block';
+    const filePath = `moments/${Date.now()}_${file.name}`;
+
+    try {
+        const { data, error } = await supabaseClient.storage.from(MEDIA_BUCKET_NAME).upload(filePath, file, {
+            onUploadProgress: (progress) => {
+                const percentage = Math.round((progress.loaded / progress.total) * 100);
+                bar.style.width = percentage + '%';
+                percentText.innerText = `جاري الرفع: ${percentage}%`;
+            }
+        });
+
+        if (error) throw error;
+
+        const { data: urlData } = supabaseClient.storage.from(MEDIA_BUCKET_NAME).getPublicUrl(filePath);
+        const type = file.type.startsWith('video') ? 'video' : 'image';
+        
+        // حفظ الرابط مؤقتاً في زر النشر
+        window.tempMomentMedia = { url: urlData.publicUrl, type: type };
+        alert("✅ تم تحميل الملف بنجاح، اضغط 'نشر' الآن.");
+
+    } catch (err) {
+        alert("فشل الرفع: " + err.message);
+    } finally {
+        setTimeout(() => { progressDiv.style.display = 'none'; bar.style.width = '0%'; }, 2000);
+    }
+}
+
+// 2. نشر المنشور (Moment)
+async function submitMoment() {
+    const text = document.getElementById('moment-text-input').value.trim();
+    const media = window.tempMomentMedia || null;
+
+    if (!text && !media) return alert("اكتب شيئاً أولاً!");
+
+    const { error } = await supabaseClient.from('staff_moments').insert([{
+        username: username,
+        avatar_url: userPhoto,
+        content: text,
+        media_url: media ? media.url : null,
+        media_type: media ? media.type : null,
+        likes: []
+    }]);
+
+    if (!error) {
+        document.getElementById('moment-text-input').value = '';
+        window.tempMomentMedia = null;
+        loadMoments();
+    } else {
+        alert("خطأ في النشر: تأكد من إنشاء جدول staff_moments");
+    }
+}
+
+async function loadMoments() {
+    const feed = document.getElementById('moments-feed');
+    if (!feed) return;
+
+    const { data: moments, error } = await supabaseClient
+        .from('staff_moments')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+    if (error) return;
+
+    feed.innerHTML = '';
+
+    moments.forEach(m => {
+        const isMine = m.username === username;
+        const likesArray = Array.isArray(m.likes) ? m.likes : [];
+        const hasLiked = likesArray.includes(username);
+        
+        // --- ميزة معرفة من وضع لايك ---
+        const likesNames = likesArray.length > 0 ? likesArray.join('، ') : "لا يوجد معجبين بعد";
+
+        let headerActionsHtml = '';
+        if (isMine) {
+            headerActionsHtml = `
+                <div style="display: flex; gap: 5px;">
+                    <button onclick="editMoment(${m.id})" style="background: #2a2a2a; border: 1px solid #444; color: #fff; border-radius: 6px; padding: 2px 8px; cursor: pointer; font-size: 0.75rem;">✏️ تعديل</button>
+                    <button onclick="deleteMoment(${m.id})" style="background: rgba(220,53,69,0.1); border: 1px solid rgba(220,53,69,0.5); color: #ff4d4d; border-radius: 6px; padding: 2px 8px; cursor: pointer; font-size: 0.75rem;">✕ حذف</button>
+                </div>
+            `;
+        }
+
+        let mediaHtml = '';
+        if (m.media_url) {
+            const isVideo = m.media_type === 'video' || m.media_url.includes('.mp4');
+            mediaHtml = `
+                <div style="position: relative; background: #000; overflow: hidden; border-top: 1px solid #222; border-bottom: 1px solid #222;">
+                    ${isVideo ? 
+                        `<video src="${m.media_url}" controls style="width:100%; max-height:400px; display:block;"></video>` : 
+                        `<img src="${m.media_url}" style="width:100%; max-height:450px; object-fit:contain; display:block;">`
+                    }
+                </div>
+            `;
+        }
+
+        let commentsHTML = '<div style="padding: 10px 15px; border-top: 1px solid #2a2a2a; background: #1a1a1a;">';
+        if (m.comments && Array.isArray(m.comments)) {
+            m.comments.forEach((c, index) => {
+                const isCommentMine = c.user === username;
+                const commentAvatar = c.avatar || `https://ui-avatars.com/api/?name=${c.user}&background=random`;
+                
+                commentsHTML += `
+                    <div id="comment-${m.id}-${index}" style="display: flex; gap: 10px; margin-bottom: 12px; align-items: flex-start;">
+                        <img src="${commentAvatar}" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover; border: 1px solid #333;">
+                        <div style="flex: 1;">
+                            <div style="background: #262626; padding: 8px 12px; border-radius: 12px; display: inline-block; max-width: 85%;">
+                                <b style="color: #FFD700; font-size: 0.75rem; display: block;">${c.user}</b>
+                                <span id="comment-text-${m.id}-${index}" style="color: #ddd; font-size: 0.85rem; line-height: 1.4;">${c.text}</span>
+                            </div>
+                            ${isCommentMine ? `
+                                <div style="margin-top: 3px; display: flex; gap: 12px; padding-right: 5px;">
+                                    <small onclick="enableCommentEdit(${m.id}, ${index})" style="color: #666; cursor: pointer; font-size: 0.7rem;">تعديل</small>
+                                    <small onclick="deleteComment(${m.id}, ${index})" style="color: #a04040; cursor: pointer; font-size: 0.7rem;">حذف</small>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>`;
+            });
+        }
+
+        commentsHTML += `
+            <div style="display: flex; gap: 10px; margin-top: 15px; align-items: center;">
+                <img src="${userPhoto || 'https://ui-avatars.com/api/?name='+username}" style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover; border: 1px solid var(--primary-color);">
+                <div style="flex: 1; position: relative; display: flex; align-items: center;">
+                    <input type="text" id="input-comment-${m.id}" placeholder="اكتب تعليقاً..." 
+                        style="width: 100%; background: #2a2a2a; border: 1px solid #444; border-radius: 20px; padding: 7px 40px 7px 15px; color: #fff; outline: none; font-size: 0.8rem;"
+                        onkeypress="if(event.key === 'Enter') submitNewComment(${m.id})">
+                    <button onclick="submitNewComment(${m.id})" style="position: absolute; left: 10px; background: none; border: none; color: var(--primary-color); cursor: pointer; font-size: 1rem;">➤</button>
+                </div>
+            </div>
+        </div>`;
+
+        const card = `
+            <div class="moment-card" style="background: #1e1e1e; margin-bottom: 25px; border-radius: 12px; border: 1px solid #333; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+                <div style="padding: 12px 15px; display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <img src="${m.avatar_url || 'https://ui-avatars.com/api/?name='+m.username}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 1.5px solid #FFD700;">
+                        <div>
+                            <b style="color: #fff; font-size: 0.9rem;">${m.username}</b>
+                            <div style="color: #666; font-size: 0.65rem;">${new Date(m.created_at).toLocaleDateString('ar-EG')}</div>
+                        </div>
+                    </div>
+                    ${headerActionsHtml}
+                </div>
+
+                ${m.content ? `<p style="padding: 0 15px 12px; margin: 0; color: #eee; font-size: 0.9rem; line-height: 1.5;">${m.content}</p>` : ''}
+                
+                ${mediaHtml}
+
+                <div style="padding: 10px 15px; display: flex; gap: 25px; align-items: center;">
+                    <div class="moment-likes-container" 
+                         style="cursor: pointer; display: flex; align-items: center; gap: 6px; position: relative;" 
+                         onclick="handleToggleLike(${m.id}, ${JSON.stringify(likesArray)})"
+                         title="المعجبون: ${likesNames}">
+                        
+                        <span style="font-size: 1.2rem;">${hasLiked ? '❤️' : '🤍'}</span>
+                        <small style="color: ${hasLiked ? '#ff4d4d' : '#888'}; font-weight: bold;">${likesArray.length}</small>
+                        
+                        <div class="likes-tooltip">${likesNames}</div>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 1.2rem;">💬</span>
+                        <small style="color: #888;">${m.comments ? m.comments.length : 0}</small>
+                    </div>
+                </div>
+                ${commentsHTML}
+            </div>`;
+        feed.innerHTML += card;
+    });
+}
+
+
+
+
+// نظام تبديل اللايك (إضافة / إلغاء)
+async function toggleMomentLike(id, currentLikes) {
+    if (!username) return;
+    let likes = Array.isArray(currentLikes) ? currentLikes : [];
+    
+    if (likes.includes(username)) {
+        // إذا كان موجوداً، نقوم بحذفه (إلغاء اللايك)
+        likes = likes.filter(u => u !== username);
+    } else {
+        // إذا لم يكن موجوداً، نقوم بإضافته
+        likes.push(username);
+    }
+
+    const { error } = await supabaseClient.from('staff_moments').update({ likes: likes }).eq('id', id);
+    if (!error) loadMoments(); // تحديث فوري للشاشة
+}
+
+// إرسال تعليق مع حفظ صورة المستخدم الحالية
+async function submitNewComment(momentId) {
+    const input = document.getElementById(`input-comment-${momentId}`);
+    const text = input.value.trim();
+    if (!text) return;
+
+    input.value = 'جاري الإرسال...';
+    input.disabled = true;
+
+    const { data: moment } = await supabaseClient.from('staff_moments').select('comments').eq('id', momentId).single();
+    let currentComments = Array.isArray(moment.comments) ? moment.comments : [];
+
+    currentComments.push({
+        user: username,
+        avatar: userPhoto || null, // حفظ الصورة الحالية مع التعليق
+        text: text,
+        created_at: new Date().toISOString()
+    });
+
+    await supabaseClient.from('staff_moments').update({ comments: currentComments }).eq('id', momentId);
+    loadMoments();
+}
+
+// دالة حذف المنشور (بشكل آمن)
+async function deleteMoment(id) {
+    if (!confirm("هل أنت متأكد من حذف هذا المنشور نهائياً؟")) return;
+    const { error } = await supabaseClient.from('staff_moments').delete().eq('id', id);
+    if (!error) loadMoments();
+}
+
+
+async function submitMoment() {
+    const textInput = document.getElementById('moment-text-input');
+    const text = textInput.value.trim();
+    const media = window.tempMomentMedia || null;
+
+    if (!text && !media) return alert("اكتب شيئاً أو أضف صورة أولاً!");
+
+    // إظهار حالة جاري النشر
+    const submitBtn = event.target;
+    const originalText = submitBtn.innerText;
+    submitBtn.innerText = "جاري النشر...";
+    submitBtn.disabled = true;
+
+    try {
+        const { error } = await supabaseClient.from('staff_moments').insert([{
+            username: username,
+            avatar_url: userPhoto,
+            content: text,
+            media_url: media ? media.url : null,
+            media_type: media ? media.type : null,
+            likes: [],
+            comments: []
+        }]);
+
+        if (error) throw error;
+
+        // نجاح النشر
+        textInput.value = '';
+        window.tempMomentMedia = null;
+        alert("✅ تم النشر بنجاح!");
+        loadMoments(); // تحديث العرض
+
+    } catch (err) {
+        console.error("Error submitting moment:", err);
+        alert("خطأ في النشر: " + err.message);
+    } finally {
+        submitBtn.innerText = originalText;
+        submitBtn.disabled = false;
+    }
+}
+
+async function editMoment(id) {
+    // 1. طلب النص الجديد من المستخدم عبر نافذة منبثقة
+    const newText = prompt("قم بتعديل نص اليومية:");
+    
+    // إذا ضغط المستخدم على Cancel أو ترك النص فارغاً لا نفعل شيئاً
+    if (newText === null) return; 
+    if (newText.trim() === "") return alert("لا يمكن ترك النص فارغاً");
+
+    try {
+        // 2. تحديث السجل في جدول staff_moments في Supabase
+        const { error } = await supabaseClient
+            .from('staff_moments')
+            .update({ content: newText }) // تحديث عمود المحتوى
+            .eq('id', id); // البحث عن طريق معرف المنشور
+
+        if (error) throw error;
+
+        // 3. إعادة تحميل المنشورات لتظهر التعديلات فوراً
+        alert("✅ تم تعديل المنشور بنجاح");
+        loadMoments(); 
+
+    } catch (err) {
+        console.error("Error updating moment:", err);
+        alert("خطأ في التعديل: " + err.message);
+    }
+}
+
+async function addMomentComment(id) {
+    if (!username) return alert("سجل دخولك أولاً");
+    
+    const commentText = prompt("اكتب تعليقك هنا:");
+    if (!commentText || commentText.trim() === "") return;
+
+    try {
+        // جلب التعليقات الحالية أولاً
+        let { data: moment } = await supabaseClient
+            .from('staff_moments')
+            .select('comments')
+            .eq('id', id)
+            .single();
+
+        let currentComments = Array.isArray(moment.comments) ? moment.comments : [];
+        
+        // إضافة التعليق الجديد
+        currentComments.push({
+            user: username,
+            text: commentText.trim(),
+            time: new Date().toISOString()
+        });
+
+        // تحديث قاعدة البيانات
+        const { error } = await supabaseClient
+            .from('staff_moments')
+            .update({ comments: currentComments })
+            .eq('id', id);
+
+        if (error) throw error;
+        
+        loadMoments(); // تحديث العرض لرؤية التعليق الجديد
+    } catch (err) {
+        alert("فشل إضافة التعليق: " + err.message);
+    }
+}
+
+// حذف تعليق محدد
+async function deleteComment(momentId, commentIndex) {
+    if (!confirm("هل تريد حذف هذا التعليق؟")) return;
+
+    const { data: moment } = await supabaseClient.from('staff_moments').select('comments').eq('id', momentId).single();
+    let currentComments = Array.isArray(moment.comments) ? moment.comments : [];
+
+    // حذف التعليق بناءً على الترتيب (Index)
+    currentComments.splice(commentIndex, 1);
+
+    await supabaseClient.from('staff_moments').update({ comments: currentComments }).eq('id', momentId);
+    loadMoments();
+}
+
+// تعديل تعليق محدد
+async function editComment(momentId, commentIndex) {
+    const { data: moment } = await supabaseClient.from('staff_moments').select('comments').eq('id', momentId).single();
+    let currentComments = moment.comments;
+    
+    const newText = prompt("تعديل التعليق:", currentComments[commentIndex].text);
+    if (newText === null || newText.trim() === "") return;
+
+    currentComments[commentIndex].text = newText.trim();
+
+    await supabaseClient.from('staff_moments').update({ comments: currentComments }).eq('id', momentId);
+    loadMoments();
+}
+
+
+
+// 2. تفعيل وضع التعديل داخل الفقاعة نفسها (بدون نافذة)
+function enableCommentEdit(momentId, index) {
+    const textSpan = document.getElementById(`comment-text-${momentId}-${index}`);
+    const oldText = textSpan.innerText;
+    
+    // تحويل النص إلى حقل إدخال
+    textSpan.innerHTML = `
+        <div style="display:flex; flex-direction:column; gap:5px; margin-top:5px;">
+            <input type="text" id="edit-input-${momentId}-${index}" 
+                value="${oldText}" 
+                style="background:#333; border:1px solid var(--primary-color); color:#fff; border-radius:10px; padding:5px 10px; outline:none; font-size:0.8rem;">
+            <div style="display:flex; gap:10px;">
+                <small onclick="saveCommentEdit(${momentId}, ${index})" style="color:var(--success-color); cursor:pointer;">حفظ</small>
+                <small onclick="loadMoments()" style="color:#888; cursor:pointer;">إلغاء</small>
+            </div>
+        </div>
+    `;
+    document.getElementById(`edit-input-${momentId}-${index}`).focus();
+}
+
+// 3. حفظ التعديل في قاعدة البيانات
+async function saveCommentEdit(momentId, index) {
+    const newText = document.getElementById(`edit-input-${momentId}-${index}`).value.trim();
+    if (!newText) return;
+
+    const { data: moment } = await supabaseClient.from('staff_moments').select('comments').eq('id', momentId).single();
+    let currentComments = moment.comments;
+
+    currentComments[index].text = newText;
+
+    await supabaseClient.from('staff_moments').update({ comments: currentComments }).eq('id', momentId);
+    loadMoments();
+}
+
+// 4. حذف التعليق
+async function deleteComment(momentId, index) {
+    if (!confirm("حذف التعليق؟")) return;
+    const { data: moment } = await supabaseClient.from('staff_moments').select('comments').eq('id', momentId).single();
+    let currentComments = moment.comments;
+    currentComments.splice(index, 1);
+    await supabaseClient.from('staff_moments').update({ comments: currentComments }).eq('id', momentId);
+    loadMoments();
+}
+
+async function handleToggleLike(momentId, currentLikes) {
+    if (!username) return;
+
+    // التأكد أن اللايكات مصفوفة
+    let likes = Array.isArray(currentLikes) ? [...currentLikes] : [];
+    const index = likes.indexOf(username);
+
+    if (index > -1) {
+        // 1. ميزة الإزالة: إذا كان اسمي موجوداً، أقوم بإزالته (إلغاء اللايك)
+        likes.splice(index, 1);
+    } else {
+        // 2. ميزة الإضافة: إذا لم يكن موجوداً، أقوم بإضافته
+        likes.push(username);
+    }
+
+    // تحديث قاعدة البيانات في Supabase
+    const { error } = await supabaseClient
+        .from('staff_moments')
+        .update({ likes: likes })
+        .eq('id', momentId);
+
+    if (!error) {
+        loadMoments(); // إعادة تحميل المنشورات لتحديث الواجهة فوراً
+    }
+}
+
 
 </script></body>
+<div id="staff-moments-interface" class="modal-overlay" style="display: none; flex-direction: column; padding: 0;">
+    <div class="book-container" style="width: 100%; max-width: 600px; height: 95vh; display: flex; flex-direction: column; overflow: hidden; border-top-color: #FFD700;">
+        <header style="padding-bottom: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+            <h2 style="color: #FFD700; font-size: 1.5rem;">🎞️ يوميات الموظفين</h2>
+            <button onclick="closeStaffMoments()" style="background:none; border:none; color:#fff; font-size: 1.5rem; cursor:pointer;">✖</button>
+        </header>
+
+        <div style="background: #151515; padding: 15px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #333;">
+            <textarea id="moment-text-input" placeholder="بماذا تفكر اليوم؟" style="width: 100%; background: #222; border: none; border-radius: 8px; color: #fff; padding: 10px; resize: none; height: 60px; margin-bottom: 10px;"></textarea>
+            
+            <div id="moment-upload-progress" style="display:none; margin-bottom: 10px;">
+                <div style="height: 4px; background: #333; border-radius: 2px; overflow: hidden;">
+                    <div id="moment-progress-bar" style="width: 0%; height: 100%; background: #FFD700; transition: 0.3s;"></div>
+                </div>
+                <small id="moment-percent" style="color: #FFD700; font-size: 0.7rem;">0%</small>
+            </div>
+
+            <div style="display: flex; justify-content: space-between;">
+                <button class="read-more-btn" onclick="document.getElementById('moment-file').click()" style="font-size: 0.8rem;">🖼️ إضافة صورة/فيديو</button>
+                <button class="btn-login" onclick="submitMoment()" style="margin-top: 0; width: auto; padding: 5px 25px;">نشر</button>
+                <input type="file" id="moment-file" accept="image/*,video/*" hidden onchange="handleMomentUpload(this)">
+            </div>
+        </div>
+
+        <div id="moments-feed" style="flex: 1; overflow-y: auto; padding-bottom: 20px;">
+            </div>
+    </div>
+</div>
 
 
 
