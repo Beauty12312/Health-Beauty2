@@ -9,6 +9,64 @@
 
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><style>
+
+#staff-online-bubbles {
+    display: flex;
+    gap: 15px;
+    padding: 15px 10px;
+    background: #151515;
+    overflow-x: auto; /* يسمح بالسحب لليمين واليسار */
+    border-bottom: 2px solid #222;
+    scrollbar-width: none; /* إخفاء شريط التمرير */
+}
+
+#staff-online-bubbles::-webkit-scrollbar {
+    display: none;
+}
+
+@keyframes glow-green {
+    from { box-shadow: 0 0 5px rgba(0,200,81,0.4); transform: scale(1); }
+    to { box-shadow: 0 0 15px rgba(0,200,81,0.8); transform: scale(1.05); }
+}
+
+
+
+/* شريط التنقل العلوي الجديد لقسم الموظفين */
+.staff-nav-bar {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    background: #1a1a1a;
+    padding: 10px;
+    border-bottom: 2px solid var(--primary-color);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+
+.staff-nav-btn {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    transition: 0.3s;
+}
+
+.staff-nav-btn:hover {
+    color: var(--primary-color);
+}
+
+.staff-nav-btn span {
+    font-size: 0.7rem;
+    font-weight: bold;
+}
+
+
 /* تنسيق قائمة أسماء المعجبين */
 .likes-tooltip {
     display: none;
@@ -1106,7 +1164,7 @@ async function setUsername() {
         loadRecentMessages();
         startMessageListener();
         setupPresenceAndTyping();
-
+        setupMomentsNotifications();
     } catch (error) {
         console.error("خطأ في عملية التحقق والدخول:", error);
     }
@@ -1185,6 +1243,29 @@ function exitChat() { location.reload(); }
 
 
 
+// 1. ضع هاتين الدالتين هنا (قبل الدالة الأساسية) لحل الخطأ الأحمر openPostModal
+window.openPostModal = function() {
+    const modal = document.getElementById('create-post-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+        // تحديث البيانات الأساسية داخل النافذة عند فتحها
+        if (document.getElementById('display-user-name')) {
+            document.getElementById('display-user-name').innerText = username || "زميلي";
+        }
+        if (document.getElementById('current-user-avatar-moment')) {
+            document.getElementById('current-user-avatar-moment').src = userPhoto || `https://ui-avatars.com/api/?name=${username}`;
+        }
+        const textarea = document.getElementById('main-moment-input');
+        if (textarea) textarea.focus();
+    }
+};
+
+window.closePostModal = function() {
+    const modal = document.getElementById('create-post-modal');
+    if (modal) modal.style.display = 'none';
+};
+
+// 2. الدالة المحدثة بالكامل لصور المتصلين (استبدل بها الدالة القديمة في سطر 1272)
 function setupPresenceAndTyping() {
     if(!supabaseClient) return;
 
@@ -1192,34 +1273,37 @@ function setupPresenceAndTyping() {
     presenceChannel = supabaseClient.channel('room_01');
 
     presenceChannel
-        // 1. تتبع المتصلين (Presence) - لتحديث قائمة المستخدمين النشطين
+        // 1. تتبع المتصلين (Presence) - لتحديث القائمة بالصور
         .on('presence', { event: 'sync' }, () => { 
             updateOnlineUsersList(presenceChannel.presenceState()); 
         })
 
-        // 2. استقبال إشارة "يكتب الآن" (Typing) من المستخدمين الآخرين
+        // 2. استقبال إشارة "يكتب الآن" (Typing)
         .on('broadcast', { event: 'typing' }, (payload) => {
             if(payload.payload.user !== username) {
                 showTypingIndicator(payload.payload.user);
             }
         })
 
-        // 3. استقبال إشارة "تمت المشاهدة" (Seen Receipts) لتحديث دوائر الصور
+        // 3. استقبال إشارة "تمت المشاهدة"
         .on('broadcast', { event: 'message_seen' }, (payload) => {
             if (typeof updateSeenStatus === 'function') {
                 updateSeenStatus(payload.payload.msgId, payload.payload.user, payload.payload.photo);
             }
         })
 
-        // بدء الاشتراك الفعلي في القناة
+        // بدء الاشتراك الفعلي وإرسال الصورة الشخصية
         .subscribe(async (status) => {
             if (status === 'SUBSCRIBED') {
-                // تتبع دخول المستخدم الحالي للقناة
-                await presenceChannel.track({ user: username });
+                // إضافة المطلـوب: إرسال الصورة الشخصية ليراها الجميع
+                await presenceChannel.track({ 
+                    user: username, 
+                    photo: userPhoto // هنا يتم إرسال رابط صورتك المرفوعة
+                });
             }
         });
 
-    // دالة إرسال إشارة الكتابة (تُنفذ عند كل ضغطة مفتاح)
+    // دالة إرسال إشارة الكتابة
     const handleTyping = () => {
         if(presenceChannel) {
             presenceChannel.send({
@@ -1232,7 +1316,7 @@ function setupPresenceAndTyping() {
         resetInactivityTimer();
     };
 
-    // ربط الحدث بحقول الإدخال في الدردشة العامة والخاصة
+    // ربط الحدث بحقول الإدخال
     const msgInput = document.getElementById('msg-input');
     const privateMsgInput = document.getElementById('private-msg-input');
 
@@ -1246,34 +1330,65 @@ function setupPresenceAndTyping() {
 }
 
 function updateOnlineUsersList(state) {
-
+    // 1. استهداف القائمتين (القديمة في الدردشة والجديدة في اليوميات)
     const list = document.getElementById('online-users-list');
+    const bubbleList = document.getElementById('staff-online-bubbles');
 
-    list.innerHTML = '';
+    // مسح المحتويات القديمة لتجنب التكرار عند كل تحديث
+    if (list) list.innerHTML = '';
+    if (bubbleList) bubbleList.innerHTML = '';
 
-    const users = [];
+    const users = {}; // كائن لتخزين البيانات الفرعية (الاسم والصورة)
 
+    // 2. تجميع البيانات من نظام Presence
     for (const id in state) {
-
-        const user = state[id][0].user;
-
-        if(!users.includes(user)) users.push(user);
-
+        const userDetails = state[id][0];
+        const uName = userDetails.user;
+        
+        // جلب الصورة من البيانات المرسلة أو وضع صورة افتراضية
+        const uPhoto = userDetails.photo || `https://ui-avatars.com/api/?name=${uName}&background=random&color=fff`;
+        
+        if (!users[uName]) {
+            users[uName] = uPhoto;
+        }
     }
 
-    users.forEach(u => {
+    // 3. رسم العناصر في الواجهتين
+    for (const [name, photo] of Object.entries(users)) {
+        
+        // أ. القائمة القديمة (النصية) في الدردشة العامة - للحفاظ على الامتيازات
+        if (list) {
+            const div = document.createElement('div');
+            div.className = 'online-user';
+            div.innerHTML = `<div class="online-dot"></div> ${name}`;
+            list.appendChild(div);
+        }
 
-        const div = document.createElement('div');
+        // ب. الكرات المشعة الجديدة في قسم اليوميات
+// استبدل الجزء الخاص بالـ bubbleList داخل الدالة بهذا الكود
+if (bubbleList) {
+    const container = document.createElement('div');
+    container.style = "display: inline-flex; flex-direction: column; align-items: center; gap: 8px; min-width: 70px; flex-shrink: 0; cursor: pointer;";
+    
+    // عند النقر يفتح نافذة الهوية ويمرر الاسم والصورة
+    container.onclick = () => openAvatarModal(name, photo);
 
-        div.className = 'online-user';
-
-        div.innerHTML = `<div class="online-dot"></div> ${u}`;
-
-        list.appendChild(div);
-
-    });
-
+    container.innerHTML = `
+        <div style="position: relative; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center;">
+            <img src="${photo}" 
+                 style="width: 50px; height: 50px; border-radius: 50%; border: 2px solid #00c851; 
+                        object-fit: cover; aspect-ratio: 1 / 1; display: block;
+                        animation: glow-green 1.5s infinite alternate;">
+            <div style="position: absolute; bottom: 2px; right: 2px; width: 12px; height: 12px; background: #00c851; border: 2px solid #151515; border-radius: 50%;"></div>
+        </div>
+        <span style="font-size: 0.7rem; color: #eee; font-weight: 500;">${name === username ? 'أنت' : name}</span>
+    `;
+    bubbleList.appendChild(container);
 }
+
+    }
+}
+
 
 
 
@@ -1609,33 +1724,6 @@ function startMessageListener() {
     });
 }
 
-
-// === الرسائل الخاصة ===
-
-async function loadRecentPrivateMessages() {
-    if(!supabaseClient) return;
-    const { data } = await supabaseClient.from('private_messages').select('*').order('created_at', { ascending: true }).limit(200);
-    if (data) {
-        data.forEach(msg => {
-            appendMessageToUI(
-                msg.sender_name, 
-                msg.content, 
-                msg.type, 
-                msg.color, 
-                msg.sender_name === username, 
-                true, 
-                msg.id, 
-                true, 
-                msg.created_at,
-                msg.reply_to,
-                msg.reactions // المعامل رقم 11 الصحيح
-            );
-        });
-        scrollToBottom();
-    }
-}
-
-
 async function loadRecentPrivateMessages() {
     if(!supabaseClient) return;
     
@@ -1745,23 +1833,26 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
         if (actions) actions.style.display = 'none';
     };
 
-    // --- كود أيقونة الصورة الشخصية (تحسين الجلب من قاعدة البيانات) ---
-    let avatarSrc = "https://ui-avatars.com/api/?name=" + sender + "&background=random&color=fff";
-    
-    // التحقق من وجود الصورة في الحقل المخصص القادم من السيرفر
-    if (userAvatarFromDB && typeof userAvatarFromDB === 'string' && userAvatarFromDB.startsWith('http')) {
-        avatarSrc = userAvatarFromDB; 
-    } 
-    // دعم التوافق مع الأنظمة القديمة
-    else if (typeof reactionsData === 'string' && reactionsData.startsWith('http')) {
-        avatarSrc = reactionsData; 
-    }
+// تحديد ما سيظهر داخل الدائرة (صورة أو أول حرف من الاسم)
+const userInitial = sender.charAt(0).toUpperCase();
+const hasCustomPhoto = (userAvatarFromDB && userAvatarFromDB.startsWith('http'));
 
-    const avatarHTML = `
-        <img src="${avatarSrc}" 
-             style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; margin: 0 8px; border: 1px solid rgba(255,255,255,0.1); flex-shrink: 0;"
-             onerror="this.src='https://ui-avatars.com/api/?name=${sender}&background=random'">
-    `;
+const avatarHTML = `
+    <div style="width: 35px; height: 35px; margin: 0 8px; flex-shrink: 0; position: relative;">
+        ${hasCustomPhoto ? 
+            `<img src="${userAvatarFromDB}" 
+                 style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; border: 2px solid ${isMine ? 'var(--primary-color)' : '#444'}; shadow: 0 2px 5px rgba(0,0,0,0.3);"
+                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">` 
+            : ''
+        }
+        <div style="width: 100%; height: 100%; border-radius: 50%; background: ${color}; color: #000; 
+                    display: ${hasCustomPhoto ? 'none' : 'flex'}; align-items: center; justify-content: center; 
+                    font-weight: 800; font-size: 0.85rem; border: 2px solid rgba(255,255,255,0.2);">
+            ${userInitial}
+        </div>
+    </div>
+`;
+
 
     // --- تنسيق فقاعة الرسالة الفعلي ---
     let bubbleStyle = "";
@@ -2254,37 +2345,75 @@ function openPrivateLock() {
 
 
 
+// 1. تعديل دالة فتح قسم الموظفين لتفتح اليوميات أولاً
 function openPrivateChat() {
-    // إخفاء المحتوى العام وإظهار الغرفة السرية
+    // إخفاء الواجهة العامة
     document.getElementById('chat-interface').style.display = 'none';
-    document.getElementById('private-chat-interface').style.display = 'flex';
+    // فتح واجهة اليوميات مباشرة
+    document.getElementById('staff-moments-interface').style.display = 'flex';
     currentChatTarget = 'private';
-    
-    // نقوم فقط بتحميل الرسائل السابقة، لأن المستمع يعمل بالفعل منذ البداية
-    loadRecentPrivateMessages(); 
-    
-    // تم حذف السطر المسبب للتكرار هنا
+    loadMoments(); // تحميل اليوميات فور الدخول
 }
 
+// 2. دالة لفتح شات المجموعة (الدردشة الخاصة بالموظفين)
+function showPrivateGroupChat() {
+    document.getElementById('staff-moments-interface').style.display = 'none';
+    document.getElementById('private-chat-interface').style.display = 'flex';
+    loadRecentPrivateMessages();
+}
 
+// 3. دالة للعودة من الشات إلى اليوميات
+function backToMoments() {
+    document.getElementById('private-chat-interface').style.display = 'none';
+    document.getElementById('staff-moments-interface').style.display = 'flex';
+    loadMoments();
+}
 
-// --- FIX: make pickers available in both public & private chats ---
+// 4. نظام قائمة الزملاء لبدء شات فردي (تجهيز مستقبلي)
+function toggleFriendsList() {
+    const modal = document.getElementById('friends-list-modal');
+    if (modal.style.display === 'flex') {
+        modal.style.display = 'none';
+    } else {
+        modal.style.display = 'flex';
+        renderStaffOnlineList();
+    }
+}
 
-// Move the pickers out of the chat container so they are not hidden
-
-['sticker-picker','emoji-picker','radio-picker'].forEach(id=>{
-
-    const el = document.getElementById(id);
-
-    if (el && el.parentNode !== document.body) {
-
-        // keep current display/style but move to body to avoid being hidden
-
-        document.body.appendChild(el);
-
+function renderStaffOnlineList() {
+    const listCont = document.getElementById('staff-online-list');
+    listCont.innerHTML = '';
+    // جلب المستخدمين من الـ presenceChannel
+    const state = presenceChannel.presenceState();
+    const users = [];
+    for (const id in state) {
+        const u = state[id][0].user;
+        if(!users.includes(u) && u !== username) users.push(u);
     }
 
-});
+    if (users.length === 0) {
+        listCont.innerHTML = '<p style="text-align:center; color:#666;">لا يوجد زملاء متصلين حالياً</p>';
+        return;
+    }
+
+    users.forEach(u => {
+        const div = document.createElement('div');
+        div.style = "display:flex; align-items:center; justify-content:space-between; padding:10px; border-bottom:1px solid #333; cursor:pointer;";
+        div.innerHTML = `
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div class="online-dot"></div>
+                <span style="color:#fff;">${u}</span>
+            </div>
+            <button style="background:var(--primary-color); border:none; border-radius:50%; width:30px; height:30px;">💬</button>
+        `;
+        div.onclick = () => {
+            alert("سيتم فتح شات خاص مع " + u + " في التحديث القادم");
+            toggleFriendsList();
+        };
+        listCont.appendChild(div);
+    });
+}
+
 
 
 
@@ -2752,8 +2881,11 @@ async function loadMoments() {
             </div>
         </div>`;
 
+        // تحويل المصفوفة إلى نص آمن للاستخدام داخل خاصية onclick
+        const safeLikes = JSON.stringify(likesArray).replace(/"/g, '&quot;');
+
         const card = `
-            <div class="moment-card" style="background: #1e1e1e; margin-bottom: 25px; border-radius: 12px; border: 1px solid #333; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+            <div class="moment-card" id="moment-${m.id}" style="background: #1e1e1e; margin-bottom: 25px; border-radius: 12px; border: 1px solid #333; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: 0.5s;">
                 <div style="padding: 12px 15px; display: flex; align-items: center; justify-content: space-between;">
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <img src="${m.avatar_url || 'https://ui-avatars.com/api/?name='+m.username}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 1.5px solid #FFD700;">
@@ -2772,7 +2904,7 @@ async function loadMoments() {
                 <div style="padding: 10px 15px; display: flex; gap: 25px; align-items: center;">
                     <div class="moment-likes-container" 
                          style="cursor: pointer; display: flex; align-items: center; gap: 6px; position: relative;" 
-                         onclick="handleToggleLike(${m.id}, ${JSON.stringify(likesArray)})"
+                         onclick="handleToggleLike(${m.id}, ${safeLikes})"
                          title="المعجبون: ${likesNames}">
                         
                         <span style="font-size: 1.2rem;">${hasLiked ? '❤️' : '🤍'}</span>
@@ -2791,7 +2923,6 @@ async function loadMoments() {
         feed.innerHTML += card;
     });
 }
-
 
 
 
@@ -2814,26 +2945,73 @@ async function toggleMomentLike(id, currentLikes) {
 
 // إرسال تعليق مع حفظ صورة المستخدم الحالية
 async function submitNewComment(momentId) {
+    // 1. الوصول للحقل الصحيح بناءً على ID المنشور
     const input = document.getElementById(`input-comment-${momentId}`);
+    if (!input) {
+        console.error("لم يتم العثور على حقل الإدخال للمنشور:", momentId);
+        return;
+    }
+
     const text = input.value.trim();
+    
+    // 2. التحقق من وجود نص ومن تسجيل الدخول
     if (!text) return;
+    if (!username) {
+        alert("يجب تسجيل الدخول أولاً لتتمكن من التعليق");
+        return;
+    }
 
-    input.value = 'جاري الإرسال...';
+    // 3. قفل الحقل مؤقتاً لمنع التكرار
+    const originalPlaceholder = input.placeholder;
     input.disabled = true;
+    input.value = "";
+    input.placeholder = "جاري إرسال تعليقك...";
 
-    const { data: moment } = await supabaseClient.from('staff_moments').select('comments').eq('id', momentId).single();
-    let currentComments = Array.isArray(moment.comments) ? moment.comments : [];
+    try {
+        // 4. جلب التعليقات الحالية من قاعدة البيانات
+        let { data: moment, error: fetchError } = await supabaseClient
+            .from('staff_moments')
+            .select('comments')
+            .eq('id', momentId)
+            .single();
 
-    currentComments.push({
-        user: username,
-        avatar: userPhoto || null, // حفظ الصورة الحالية مع التعليق
-        text: text,
-        created_at: new Date().toISOString()
-    });
+        if (fetchError) throw fetchError;
 
-    await supabaseClient.from('staff_moments').update({ comments: currentComments }).eq('id', momentId);
-    loadMoments();
+        let currentComments = Array.isArray(moment.comments) ? moment.comments : [];
+
+        // 5. بناء كائن التعليق الجديد
+        const newComment = {
+            user: username,
+            avatar: userPhoto || `https://ui-avatars.com/api/?name=${username}`,
+            text: text,
+            created_at: new Date().toISOString()
+        };
+
+        currentComments.push(newComment);
+
+        // 6. تحديث السجل في Supabase
+        const { error: updateError } = await supabaseClient
+            .from('staff_moments')
+            .update({ comments: currentComments })
+            .eq('id', momentId);
+
+        if (updateError) throw updateError;
+
+        // 7. نجاح العملية: تحديث الواجهة فوراً
+        console.log("تم إضافة التعليق بنجاح");
+        await loadMoments(); 
+
+    } catch (err) {
+        console.error("خطأ تقني في إرسال التعليق:", err);
+        alert("فشل الإرسال: " + err.message);
+        input.value = text; // إعادة النص في حال الفشل
+    } finally {
+        // 8. إعادة الحقل لحالته الطبيعية
+        input.disabled = false;
+        input.placeholder = originalPlaceholder;
+    }
 }
+
 
 // دالة حذف المنشور (بشكل آمن)
 async function deleteMoment(id) {
@@ -2884,32 +3062,29 @@ async function submitMoment() {
     }
 }
 
-async function editMoment(id) {
-    // 1. طلب النص الجديد من المستخدم عبر نافذة منبثقة
-    const newText = prompt("قم بتعديل نص اليومية:");
-    
-    // إذا ضغط المستخدم على Cancel أو ترك النص فارغاً لا نفعل شيئاً
-    if (newText === null) return; 
-    if (newText.trim() === "") return alert("لا يمكن ترك النص فارغاً");
-
+// 1. دالة لفتح نافذة التعديل وجلب النص الحالي
+window.editMoment = async function(id) {
     try {
-        // 2. تحديث السجل في جدول staff_moments في Supabase
-        const { error } = await supabaseClient
+        // جلب بيانات المنشور من السيرفر للتأكد من أحدث نص
+        const { data: moment, error } = await supabaseClient
             .from('staff_moments')
-            .update({ content: newText }) // تحديث عمود المحتوى
-            .eq('id', id); // البحث عن طريق معرف المنشور
+            .select('content')
+            .eq('id', id)
+            .single();
 
         if (error) throw error;
 
-        // 3. إعادة تحميل المنشورات لتظهر التعديلات فوراً
-        alert("✅ تم تعديل المنشور بنجاح");
-        loadMoments(); 
+        // وضع النص والـ ID في النافذة
+        document.getElementById('edit-moment-input').value = moment.content;
+        document.getElementById('edit-moment-id').value = id;
 
+        // إظهار النافذة
+        document.getElementById('edit-post-modal').style.display = 'flex';
+        document.getElementById('edit-moment-input').focus();
     } catch (err) {
-        console.error("Error updating moment:", err);
-        alert("خطأ في التعديل: " + err.message);
+        alert("خطأ في جلب البيانات: " + err.message);
     }
-}
+};
 
 async function addMomentComment(id) {
     if (!username) return alert("سجل دخولك أولاً");
@@ -3022,63 +3197,507 @@ async function deleteComment(momentId, index) {
     loadMoments();
 }
 
-async function handleToggleLike(momentId, currentLikes) {
-    if (!username) return;
+// متغيرات عالمية للعدادات
+let unreadMsgs = 0;
+let unreadNotifications = 0;
 
-    // التأكد أن اللايكات مصفوفة
-    let likes = Array.isArray(currentLikes) ? [...currentLikes] : [];
-    const index = likes.indexOf(username);
+async function handleToggleLike(momentId, currentLikes) {
+    if (!username) return alert("سجل دخولك أولاً!");
+
+    // تحويل البيانات لمصفوفة
+    let likesArray = Array.isArray(currentLikes) ? [...currentLikes] : [];
+    
+    const index = likesArray.indexOf(username);
 
     if (index > -1) {
-        // 1. ميزة الإزالة: إذا كان اسمي موجوداً، أقوم بإزالته (إلغاء اللايك)
-        likes.splice(index, 1);
+        likesArray.splice(index, 1); // إزالة اللايك
     } else {
-        // 2. ميزة الإضافة: إذا لم يكن موجوداً، أقوم بإضافته
-        likes.push(username);
+        likesArray.push(username); // إضافة اللايك
     }
 
-    // تحديث قاعدة البيانات في Supabase
+    // تحديث السيرفر
     const { error } = await supabaseClient
         .from('staff_moments')
-        .update({ likes: likes })
+        .update({ likes: likesArray }) 
         .eq('id', momentId);
 
-    if (!error) {
-        loadMoments(); // إعادة تحميل المنشورات لتحديث الواجهة فوراً
+    if (error) {
+        console.error("خطأ:", error.message);
+    } else {
+        // هام جداً: بدلاً من انتظار التحديث التلقائي، نقوم بتحديث البيانات يدوياً
+        // نبحث عن المنشور في الواجهة ونحدث عداد اللايكات وشكل القلب فوراً
+        loadMoments(); 
     }
 }
 
 
-</script></body>
-<div id="staff-moments-interface" class="modal-overlay" style="display: none; flex-direction: column; padding: 0;">
-    <div class="book-container" style="width: 100%; max-width: 600px; height: 95vh; display: flex; flex-direction: column; overflow: hidden; border-top-color: #FFD700;">
-        <header style="padding-bottom: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
-            <h2 style="color: #FFD700; font-size: 1.5rem;">🎞️ يوميات الموظفين</h2>
-            <button onclick="closeStaffMoments()" style="background:none; border:none; color:#fff; font-size: 1.5rem; cursor:pointer;">✖</button>
-        </header>
 
-        <div style="background: #151515; padding: 15px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #333;">
-            <textarea id="moment-text-input" placeholder="بماذا تفكر اليوم؟" style="width: 100%; background: #222; border: none; border-radius: 8px; color: #fff; padding: 10px; resize: none; height: 60px; margin-bottom: 10px;"></textarea>
+// أضف هذا الكود داخل دالة startMessageListener أو بجانبها
+function setupStaffNotifications() {
+    if (!supabaseClient) return;
+
+    // 1. مراقبة الرسائل الجديدة لزيادة عداد الرسائل
+    supabaseClient.channel('private_messages_notify')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'private_messages' }, (payload) => {
+            // إذا كانت الواجهة الحالية هي اليوميات (وليس الشات)، نزيد العداد
+            if (document.getElementById('staff-moments-interface').style.display === 'flex' && payload.new.sender_name !== username) {
+                unreadMsgs++;
+                updateBadgesUI();
+            }
+        }).subscribe();
+
+    // 2. مراقبة التعليقات الجديدة في اليوميات
+    supabaseClient.channel('moments_updates')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'staff_moments' }, (payload) => {
+            // إذا قام شخص آخر بالتعليق
+            if (payload.new.comments.length > payload.old.comments.length) {
+                const lastComment = payload.new.comments[payload.new.comments.length - 1];
+                if (lastComment.user !== username) {
+                    unreadNotifications++;
+                    updateBadgesUI();
+                }
+            }
+            // تحديث اليوميات تلقائياً عند أي لايك أو تعليق جديد
+            loadMoments();
+        }).subscribe();
+}
+
+function updateBadgesUI() {
+    const msgBadge = document.getElementById('msg-badge');
+    const notifyBadge = document.getElementById('notify-badge');
+
+    if (unreadMsgs > 0) {
+        msgBadge.innerText = unreadMsgs;
+        msgBadge.style.display = 'flex';
+    }
+    
+    if (unreadNotifications > 0) {
+        notifyBadge.innerText = unreadNotifications;
+        notifyBadge.style.display = 'flex';
+    }
+}
+
+// دالة لتصفير العدادات عند الدخول للقسم
+function resetMsgBadge() {
+    unreadMsgs = 0;
+    document.getElementById('msg-badge').style.display = 'none';
+}
+
+function resetNotifyBadge() {
+    unreadNotifications = 0;
+    document.getElementById('notify-badge').style.display = 'none';
+}
+
+// تعديل دالة فتح شات الموظفين لتصفير العداد
+function showPrivateGroupChat() {
+    resetMsgBadge(); // تصفير عداد الرسائل
+    document.getElementById('staff-moments-interface').style.display = 'none';
+    document.getElementById('private-chat-interface').style.display = 'flex';
+    loadRecentPrivateMessages();
+}
+
+// 1. إعداد مراقبة التنبيهات لليوميات
+function setupMomentsNotifications() {
+    if (!supabaseClient) return;
+
+    supabaseClient.channel('moments_personalized_notify')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'staff_moments' }, (payload) => {
             
-            <div id="moment-upload-progress" style="display:none; margin-bottom: 10px;">
-                <div style="height: 4px; background: #333; border-radius: 2px; overflow: hidden;">
-                    <div id="moment-progress-bar" style="width: 0%; height: 100%; background: #FFD700; transition: 0.3s;"></div>
-                </div>
-                <small id="moment-percent" style="color: #FFD700; font-size: 0.7rem;">0%</small>
-            </div>
+            // 1. تحقق: هل هذا المنشور ملك للمستخدم الحالي؟
+            const isMyPost = payload.new.username === username;
+            
+            const oldComments = payload.old.comments || [];
+            const newComments = payload.new.comments || [];
 
-            <div style="display: flex; justify-content: space-between;">
-                <button class="read-more-btn" onclick="document.getElementById('moment-file').click()" style="font-size: 0.8rem;">🖼️ إضافة صورة/فيديو</button>
-                <button class="btn-login" onclick="submitMoment()" style="margin-top: 0; width: auto; padding: 5px 25px;">نشر</button>
-                <input type="file" id="moment-file" accept="image/*,video/*" hidden onchange="handleMomentUpload(this)">
+            // 2. إذا وجد تعليق جديد
+            if (newComments.length > oldComments.length) {
+                const lastComment = newComments[newComments.length - 1];
+
+                // 3. الشرط الذهبي: أظهر إشعاراً فقط إذا كان المنشور لي والمعلق شخص آخر
+                if (isMyPost && lastComment.user !== username) {
+                    unreadNotifications++;
+                    updateNotifyBadgeUI();
+                    
+                    // اختياري: تنبيه صوتي بسيط
+                    console.log(`إشعار جديد: ${lastComment.user} علق على منشورك`);
+                }
+            }
+            
+            // تحديث الواجهة إذا كانت مفتوحة لرؤية التعليق فوراً
+            if (document.getElementById('staff-moments-interface').style.display === 'flex') {
+                loadMoments();
+            }
+        })
+        .subscribe();
+}
+
+
+// 2. تحديث شكل العداد الأحمر
+function updateNotifyBadgeUI() {
+    const notifyBadge = document.getElementById('notify-badge');
+    if (unreadNotifications > 0) {
+        notifyBadge.innerText = unreadNotifications;
+        notifyBadge.style.display = 'flex';
+        
+        // إضافة تأثير اهتزاز خفيف لفت الانتباه
+        notifyBadge.style.animation = "pulse 0.5s infinite alternate";
+    }
+}
+
+async function handleNotificationClick() {
+    unreadNotifications = 0;
+    document.getElementById('notify-badge').style.display = 'none';
+
+    // جلب المنشورات الخاصة بي فقط لرؤية من علق عليها
+    const { data: myMoments } = await supabaseClient
+        .from('staff_moments')
+        .select('id, comments')
+        .eq('username', username); // جلب منشوراتي أنا فقط
+
+    let myNotifications = [];
+    if (myMoments) {
+        myMoments.forEach(m => {
+            if (m.comments && Array.isArray(m.comments)) {
+                m.comments.forEach(c => {
+                    // استبعاد تعليقاتي أنا من قائمة التنبيهات
+                    if (c.user !== username) {
+                        myNotifications.push({ ...c, momentId: m.id });
+                    }
+                });
+            }
+        });
+    }
+
+    // ترتيب من الأحدث للأقدم
+    myNotifications.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+
+    // عرض القائمة المنسدلة (آخر 10 تنبيهات تخصك)
+    showNotificationDropdown(myNotifications.slice(0, 10));
+}
+
+
+function showNotificationDropdown(comments) {
+    // إزالة أي قائمة سابقة
+    const oldMenu = document.getElementById('notif-dropdown');
+    if (oldMenu) oldMenu.remove();
+
+    const dropdown = document.createElement('div');
+    dropdown.id = 'notif-dropdown';
+    dropdown.style = `
+        position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
+        width: 90%; max-width: 350px; background: #222; border: 1px solid var(--primary-color);
+        border-radius: 12px; z-index: 20000; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+        max-height: 400px; overflow-y: auto; direction: rtl;
+    `;
+
+    let html = `<div style="padding:10px; border-bottom:1px solid #333; font-weight:bold; color:var(--primary-color); text-align:center;">التنبيهات الأخيرة</div>`;
+    
+    if (comments.length === 0) {
+        html += `<div style="padding:20px; text-align:center; color:#888;">لا توجد تنبيهات جديدة</div>`;
+    } else {
+        comments.forEach(c => {
+            html += `
+                <div style="padding:12px; border-bottom:1px solid #222; cursor:pointer; display:flex; gap:10px; align-items:center;" 
+                     onclick="goToMoment(${c.momentId})">
+                    <img src="${c.avatar || 'https://ui-avatars.com/api/?name='+c.user}" style="width:35px; height:35px; border-radius:50%;">
+                    <div style="flex:1;">
+                        <b style="font-size:0.85rem; color:#fff;">${c.user}</b>
+                        <p style="font-size:0.75rem; color:#aaa; margin:0;">علق على يومياتك: ${c.text}</p>
+                    </div>
+                </div>`;
+        });
+    }
+
+    html += `<button onclick="this.parentElement.remove()" style="width:100%; padding:10px; background:#333; border:none; color:#fff; cursor:pointer; border-radius:0 0 12px 12px;">إغلاق</button>`;
+    
+    dropdown.innerHTML = html;
+    document.body.appendChild(dropdown);
+}
+
+// دالة للانتقال للمنشور عند الضغط على التنبيه
+function goToMoment(id) {
+    // 1. إغلاق قائمة الإشعارات
+    const dropdown = document.getElementById('notif-dropdown');
+    if (dropdown) dropdown.remove();
+
+    // 2. البحث عن عنصر المنشور في الصفحة باستخدام المعرف (ID)
+    // ملاحظة: يجب أن يحتوي عنصر المنشور (Card) على id="moment-123"
+    const targetMoment = document.getElementById(`moment-${id}`);
+
+    if (targetMoment) {
+        // 3. التمرير السلس للمنشور
+        targetMoment.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // 4. إضافة تأثير "وميض" (Highlight) للمنشور لجذب الانتباه
+        targetMoment.style.transition = '0.5s';
+        targetMoment.style.boxShadow = '0 0 20px var(--primary-color)';
+        
+        setTimeout(() => {
+            targetMoment.style.boxShadow = 'none';
+        }, 2000);
+    } else {
+        // إذا كان المنشور غير محمل حالياً، نقوم بإعادة تحميل اليوميات أولاً
+        console.log("المنشور غير موجود، جاري إعادة التحميل...");
+        loadMoments().then(() => {
+            setTimeout(() => goToMoment(id), 500); // محاولة ثانية بعد التحميل
+        });
+    }
+}
+
+function updateOnlineUsersList(state) {
+    const list = document.getElementById('online-users-list');
+    const bubbleList = document.getElementById('staff-online-bubbles');
+
+    if (list) list.innerHTML = '';
+    if (bubbleList) bubbleList.innerHTML = '';
+
+    const users = {};
+
+    for (const id in state) {
+        const userDetails = state[id][0];
+        const uName = userDetails.user;
+        // جلب الصورة الحقيقية من Presence أو صورة افتراضية
+        const uPhoto = userDetails.photo || `https://ui-avatars.com/api/?name=${uName}&background=random&color=fff`;
+        
+        if (!users[uName]) {
+            users[uName] = uPhoto;
+        }
+    }
+
+    for (const [name, photo] of Object.entries(users)) {
+        // 1. القائمة النصية القديمة
+        if (list) {
+            const div = document.createElement('div');
+            div.className = 'online-user';
+            div.innerHTML = `<div class="online-dot"></div> ${name}`;
+            list.appendChild(div);
+        }
+
+        // 2. كرات المتصلين (اليوميات) - النسخة المصلحة هندسياً
+        if (bubbleList) {
+            const container = document.createElement('div');
+            // تأكدنا من استخدام flex-shrink لمنع الانضغاط
+            container.style = "display: inline-flex; flex-direction: column; align-items: center; gap: 8px; min-width: 70px; flex-shrink: 0; padding-bottom: 5px;";
+            
+            container.innerHTML = `
+                <div style="position: relative; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center;">
+                    <img src="${photo}" 
+                         style="width: 50px; height: 50px; border-radius: 50%; border: 2px solid #00c851; 
+                                object-fit: cover; aspect-ratio: 1 / 1; display: block;
+                                animation: glow-green 1.5s infinite alternate; box-shadow: 0 0 10px rgba(0,200,81,0.3);"
+                         onerror="this.src='https://ui-avatars.com/api/?name=${name}'">
+                    <div style="position: absolute; bottom: 2px; right: 2px; width: 12px; height: 12px; background: #00c851; border: 2px solid #151515; border-radius: 50%;"></div>
+                </div>
+                <span style="font-size: 0.7rem; color: #eee; font-weight: 500; text-shadow: 1px 1px 2px #000; max-width: 65px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    ${name === username ? 'أنت' : name}
+                </span>
+            `;
+            bubbleList.appendChild(container);
+        }
+    }
+}
+
+// دالة فتح نافذة التعديل وجلب البيانات
+window.editMoment = async function(id) {
+    console.log("جاري تعديل المنشور رقم:", id);
+    try {
+        const { data: moment, error } = await supabaseClient
+            .from('staff_moments')
+            .select('content')
+            .eq('id', id)
+            .single();
+
+        if (error) throw error;
+
+        document.getElementById('edit-moment-input').value = moment.content;
+        document.getElementById('edit-moment-id').value = id;
+        document.getElementById('edit-post-modal').style.display = 'flex';
+    } catch (err) {
+        alert("خطأ في جلب البيانات: " + err.message);
+    }
+};
+
+// دالة إغلاق نافذة التعديل
+window.closeEditModal = function() {
+    document.getElementById('edit-post-modal').style.display = 'none';
+};
+
+// دالة الحفظ الفعلي في Supabase
+window.saveEditedMoment = async function() {
+    const id = document.getElementById('edit-moment-id').value;
+    const newContent = document.getElementById('edit-moment-input').value.trim();
+    const saveBtn = document.getElementById('save-edit-btn');
+
+    if (!newContent) return alert("لا يمكن ترك المنشور فارغاً!");
+
+    saveBtn.innerText = "جاري الحفظ...";
+    saveBtn.disabled = true;
+
+    try {
+        const { error } = await supabaseClient
+            .from('staff_moments')
+            .update({ content: newContent })
+            .eq('id', id);
+
+        if (error) throw error;
+
+        alert("✅ تم التحديث بنجاح");
+        closeEditModal(); // إغلاق النافذة
+        loadMoments();    // تحديث القائمة
+    } catch (err) {
+        alert("خطأ في الحفظ: " + err.message);
+    } finally {
+        saveBtn.innerText = "حفظ التعديلات";
+        saveBtn.disabled = false;
+    }
+};
+
+// دالة النشر النهائي من داخل النافذة المنبثقة
+window.finalizeMoment = async function() {
+    const textInput = document.getElementById('main-moment-input');
+    const text = textInput.value.trim();
+    
+    // جلب بيانات المرفقات (صورة أو فيديو) إذا كانت موجودة
+    const media = window.tempMomentMedia || null;
+
+    if (!text && !media) {
+        alert("الرجاء كتابة نص أو إضافة صورة أولاً قبل النشر!");
+        return;
+    }
+
+    // تغيير حالة الزر لمنع النقرات المتكررة
+    const submitBtn = document.querySelector('#create-post-modal .btn-login');
+    if (submitBtn) {
+        submitBtn.innerText = "جاري النشر حالياً...";
+        submitBtn.disabled = true;
+    }
+
+    try {
+        // إرسال البيانات إلى جدول staff_moments في Supabase
+        const { error } = await supabaseClient.from('staff_moments').insert([{
+            username: username,
+            avatar_url: userPhoto, // صورتك الشخصية
+            content: text,
+            media_url: media ? media.url : null,
+            media_type: media ? media.type : null,
+            likes: [],
+            comments: []
+        }]);
+
+        if (error) throw error;
+
+        // في حال نجاح النشر:
+        textInput.value = ''; // مسح النص
+        window.tempMomentMedia = null; // مسح المرفقات
+        closePostModal(); // إغلاق النافذة
+        
+        alert("✅ تم نشر يومياتك بنجاح!");
+        
+        // تحديث القائمة فوراً لرؤية المنشور الجديد
+        if (typeof loadMoments === "function") loadMoments();
+
+    } catch (err) {
+        alert("فشل النشر: " + err.message);
+        console.error("خطأ في النشر:", err);
+    } finally {
+        // إعادة الزر لحالته الطبيعية
+        if (submitBtn) {
+            submitBtn.innerText = "نشر الآن";
+            submitBtn.disabled = false;
+        }
+    }
+};
+
+// تأكد من وجود دالة الإغلاق أيضاً
+window.closePostModal = function() {
+    document.getElementById('create-post-modal').style.display = 'none';
+};
+
+
+</script>
+
+<div id="staff-moments-interface" class="modal-overlay" style="display: none; flex-direction: column; padding: 0; background: #000;">
+    
+    <div class="staff-nav-bar" style="width: 100%; position: sticky; top: 0; z-index: 1000; background: #1a1a1a; border-bottom: 1px solid #333; height: 60px; display: flex; justify-content: space-around; align-items: center;">
+        <button class="staff-nav-btn" onclick="showPrivateGroupChat()" style="position: relative; font-size: 1.4rem; background: none; border: none; color: #fff; cursor: pointer;">
+            💬 <div id="msg-badge" style="display:none; position:absolute; top:-5px; right:5px; background:red; color:white; border-radius:50%; width:18px; height:18px; font-size:10px; display:flex; align-items:center; justify-content:center; border:2px solid #1a1a1a;">0</div>
+        </button>
+        <button class="staff-nav-btn" onclick="toggleFriendsList()" style="font-size: 1.4rem; background: none; border: none; color: #fff; cursor: pointer;">👥</button>
+        <button class="staff-nav-btn" onclick="handleNotificationClick()" style="position: relative; font-size: 1.4rem; background: none; border: none; color: #fff; cursor: pointer;">
+            🔔 <div id="notify-badge" style="display:none; position:absolute; top:-5px; right:5px; background:red; color:white; border-radius:50%; width:18px; height:18px; font-size:10px; display:flex; align-items:center; justify-content:center; border:2px solid #1a1a1a;">0</div>
+        </button>
+        <button class="staff-nav-btn" onclick="closeStaffMoments()" style="color: #ff4444; font-size: 1.4rem; background: none; border: none; cursor: pointer;">✕</button>
+    </div>
+
+    <div style="flex: 1; overflow-y: auto; width: 100%; max-width: 600px; margin: 0 auto; background: #121212;" id="moments-scroll-container">
+        
+        <div id="staff-online-bubbles" style="display: flex; gap: 12px; padding: 15px; background: #151515; overflow-x: auto; border-bottom: 8px solid #000; scrollbar-width: none;"></div>
+
+ <div style="background: #1e1e1e; padding: 15px; margin-bottom: 10px; border-bottom: 1px solid #333;">
+    <div style="display: flex; gap: 12px; align-items: center;">
+        <img id="current-user-avatar-moment" src="https://ui-avatars.com/api/?name=User" style="width: 45px; height: 45px; border-radius: 50%; object-fit: cover; border: 1px solid #444;">
+        <div id="open-post-box" onclick="openPostModal()" style="flex: 1; background: #2a2a2a; border-radius: 25px; padding: 12px 18px; color: #888; font-size: 0.95rem; cursor: pointer;">
+            ما هي آخر أخبار العمل يا <span id="display-user-name" style="color: var(--primary-color);">...</span>؟
+        </div>
+    </div>
+
+    <div style="display: flex; justify-content: space-around; margin-top: 15px; border-top: 1px solid #333; padding-top: 12px;">
+        <button onclick="document.getElementById('moment-file').click()" style="background:none; border:none; color:#45bd62; display:flex; align-items:center; gap:8px; font-weight:bold; font-size:0.9rem; cursor:pointer;">
+            🖼️ فيديو/صور
+        </button>
+        <button onclick="openPostModal()" style="background:none; border:none; color:#eab026; display:flex; align-items:center; gap:8px; font-weight:bold; font-size:0.9rem; cursor:pointer;">
+            📝 منشور نصي
+        </button>
+        <input type="file" id="moment-file" accept="image/*,video/*" hidden onchange="handleMomentUpload(this)">
+    </div>
+</div>
+
+<div id="moments-feed" style="padding-bottom: 60px;"></div>
+
+<div id="create-post-modal" class="modal-overlay" style="display:none; z-index:20000; background: rgba(0,0,0,0.9); align-items: center; justify-content: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%;">
+    <div class="modal-box" style="width: 95%; max-width: 500px; background: #1e1e1e; border-radius: 15px; padding: 20px; border: 1px solid #333; position: relative;">
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 15px;">
+            <h3 style="color: var(--primary-color);">إنشاء منشور جديد</h3>
+            <button onclick="closePostModal()" style="background:none; border:none; color:#fff; font-size:1.5rem; cursor:pointer;">✕</button>
+        </div>
+        
+        <textarea id="main-moment-input" placeholder="اكتب شيئاً للزملاء..." style="width:100%; height:150px; background:transparent; border:none; color:#fff; font-size:1.1rem; outline:none; resize:none;"></textarea>
+        
+        <div id="moment-upload-progress" style="display:none; margin: 10px 0;">
+            <div style="height:6px; background:#333; border-radius:3px; overflow:hidden;">
+                <div id="moment-progress-bar" style="width:0%; height:100%; background:var(--primary-color); transition:0.3s;"></div>
             </div>
+            <small id="moment-percent" style="color:var(--primary-color); font-size:0.7rem; margin-top:5px; display:block; text-align:center;">0%</small>
         </div>
 
-        <div id="moments-feed" style="flex: 1; overflow-y: auto; padding-bottom: 20px;">
-            </div>
+        <button class="btn-login" onclick="finalizeMoment()" style="width:100%; margin-top:15px; border-radius:10px; font-size:1.1rem; background: var(--primary-color); color: #000; padding: 10px; font-weight: bold; border: none; cursor: pointer;">نشر الآن</button>
+    </div>
+</div>
+
+<div id="friends-list-modal" class="modal-overlay" style="display:none; z-index: 10001; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%;">
+    <div class="modal-box" style="background: #1e1e1e; width: 85%; max-width: 350px; border-radius: 15px; padding: 20px;">
+        <h3 style="color: var(--primary-color); text-align: center; margin-bottom: 15px;">قائمة المتصلين</h3>
+        <div id="staff-online-list" style="max-height: 350px; overflow-y: auto;"></div>
+        <button class="btn-login" style="background: #333; color: white; margin-top: 15px; width: 100%; padding: 10px; border-radius: 10px; border: none; cursor: pointer;" onclick="toggleFriendsList()">إغلاق</button>
+    </div>
+</div>
+
+<div id="edit-post-modal" class="modal-overlay" style="display:none; z-index:40001; background: rgba(0,0,0,0.9); align-items: center; justify-content: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%;">
+    <div class="modal-box" style="width: 95%; max-width: 500px; background: #1e1e1e; border-radius: 15px; padding: 20px; border: 1px solid #333;">
+        <h3 style="color: var(--primary-color); margin-bottom: 15px;">تعديل المنشور</h3>
+        
+        <textarea id="edit-moment-input" style="width:100%; height:150px; background: #252525; border: 1px solid #444; border-radius: 10px; color:#fff; padding: 10px; text-align:right;"></textarea>
+        
+        <input type="hidden" id="edit-moment-id"> 
+        
+        <button id="save-edit-btn" onclick="saveEditedMoment()" style="width:100%; margin-top:15px; background: var(--primary-color); color: #000; padding: 12px; font-weight: bold; border: none; border-radius: 10px; cursor: pointer;">حفظ التعديلات الآن</button>
+        
+        <button onclick="closeEditModal()" style="width:100%; margin-top:10px; background:transparent; color:#888; border:none; cursor:pointer;">تراجع</button>
     </div>
 </div>
 
 
-
+</body>
 </html>
+
+
