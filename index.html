@@ -676,8 +676,8 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
     <h3>قسم الموظفين للمجلة</h3>
 
     <div>
-
-        <button class="tool-btn" onclick="deleteAllPrivateMessages()" title="حذف كل رسائل الموظفين">🗑️</button>
+    <button class="tool-btn" id="staff-moments-btn" title="يوميات الموظفين" onclick="openStaffMoments()" style="color: #FFD700; font-size: 1.3rem;">🔙</button>
+ 
 
     </div>
 
@@ -685,12 +685,12 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
 
 <div>
     <button class="tool-btn" onclick="openVisitorLog()" title="سجل الزوار">🕒</button>
-    <button class="tool-btn" id="staff-moments-btn" title="يوميات الموظفين" onclick="openStaffMoments()" style="color: #FFD700; font-size: 1.3rem;">🎞️</button>
-    
+
+          <button class="tool-btn" onclick="deleteAllPrivateMessages()" title="حذف كل رسائل الموظفين">🗑️</button>
     <button class="tool-btn" onclick="checkSettingsAccess()">⚙️</button>
     <button class="tool-btn" onclick="exitChat()">✖</button>
 </div>
-
+ 
 
 <div class="chat-box" id="private-chat-box">
 
@@ -875,7 +875,7 @@ try { supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); }
 
 let appSettings = { 
 
-    deleteSeconds: 7, inactivityTimeout: 120, entranceCode: "نور١سامي", 
+    deleteSeconds: 7, inactivityTimeout: 120, entranceCode: "1993", 
 
     timerEnabled: true, inactivityEnabled: true, adminCode: "2023" 
 
@@ -1084,7 +1084,7 @@ function checkSecretCode() {
 
     const val = document.getElementById('header-search').value.trim();
 
-    if (val === appSettings.entranceCode || val === "2023" || val === "نور١سامي") {
+    if (val === appSettings.entranceCode || val === "2023" || val === "1993") {
 
         document.getElementById('header-search').value = ""; 
 
@@ -3699,5 +3699,4 @@ window.closePostModal = function() {
 
 </body>
 </html>
-
 
