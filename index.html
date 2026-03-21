@@ -1420,45 +1420,47 @@ function updateOnlineUsersList(state) {
         const uPhoto = userDetails.photo || `https://ui-avatars.com/api/?name=${uName}&background=random&color=fff`;
         
         if (!users[uName]) {
-            users[uName] = uPhoto;
+            users[uName] = { photo: uPhoto, details: userDetails };
         }
     }
 
     // 3. رسم العناصر في الواجهتين
-    for (const [name, photo] of Object.entries(users)) {
-        
-        // أ. القائمة القديمة (النصية) في الدردشة العامة - للحفاظ على الامتيازات
+    for (const [name, userData] of Object.entries(users)) {
+        const photo = userData.photo;
+
+        // أ. القائمة القديمة (النصية) في الدردشة العامة
         if (list) {
             const div = document.createElement('div');
             div.className = 'online-user';
+            div.style.cursor = "pointer"; // إضافة مؤشر النقر
+            div.onclick = () => openAvatarModal(name, photo); // تفعيل النقر هنا أيضاً
             div.innerHTML = `<div class="online-dot"></div> ${name}`;
             list.appendChild(div);
         }
 
-        // ب. الكرات المشعة الجديدة في قسم اليوميات
-// استبدل الجزء الخاص بالـ bubbleList داخل الدالة بهذا الكود
-if (bubbleList) {
-    const container = document.createElement('div');
-    container.style = "display: inline-flex; flex-direction: column; align-items: center; gap: 8px; min-width: 70px; flex-shrink: 0; cursor: pointer;";
-    
-    // عند النقر يفتح نافذة الهوية ويمرر الاسم والصورة
-    container.onclick = () => openAvatarModal(name, photo);
+        // ب. الكرات المشعة الجديدة في قسم اليوميات (مع إضافة وظيفة النقر)
+        if (bubbleList) {
+            const container = document.createElement('div');
+            container.style = "display: inline-flex; flex-direction: column; align-items: center; gap: 8px; min-width: 70px; flex-shrink: 0; cursor: pointer;";
+            
+            // الربط مع نافذة الهوية المضافة سابقاً
+            container.onclick = () => openAvatarModal(name, photo);
 
-    container.innerHTML = `
-        <div style="position: relative; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center;">
-            <img src="${photo}" 
-                 style="width: 50px; height: 50px; border-radius: 50%; border: 2px solid #00c851; 
-                        object-fit: cover; aspect-ratio: 1 / 1; display: block;
-                        animation: glow-green 1.5s infinite alternate;">
-            <div style="position: absolute; bottom: 2px; right: 2px; width: 12px; height: 12px; background: #00c851; border: 2px solid #151515; border-radius: 50%;"></div>
-        </div>
-        <span style="font-size: 0.7rem; color: #eee; font-weight: 500;">${name === username ? 'أنت' : name}</span>
-    `;
-    bubbleList.appendChild(container);
-}
-
+            container.innerHTML = `
+                <div style="position: relative; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center;">
+                    <img src="${photo}" 
+                         style="width: 50px; height: 50px; border-radius: 50%; border: 2px solid #00c851; 
+                                object-fit: cover; aspect-ratio: 1 / 1; display: block;
+                                animation: glow-green 1.5s infinite alternate;">
+                    <div style="position: absolute; bottom: 2px; right: 2px; width: 12px; height: 12px; background: #00c851; border: 2px solid #151515; border-radius: 50%;"></div>
+                </div>
+                <span style="font-size: 0.7rem; color: #eee; font-weight: 500;">${name === username ? 'أنت' : name}</span>
+            `;
+            bubbleList.appendChild(container);
+        }
     }
 }
+
 
 
 
@@ -3583,58 +3585,6 @@ function goToMoment(id) {
     }
 }
 
-function updateOnlineUsersList(state) {
-    const list = document.getElementById('online-users-list');
-    const bubbleList = document.getElementById('staff-online-bubbles');
-
-    if (list) list.innerHTML = '';
-    if (bubbleList) bubbleList.innerHTML = '';
-
-    const users = {};
-
-    for (const id in state) {
-        const userDetails = state[id][0];
-        const uName = userDetails.user;
-        // جلب الصورة الحقيقية من Presence أو صورة افتراضية
-        const uPhoto = userDetails.photo || `https://ui-avatars.com/api/?name=${uName}&background=random&color=fff`;
-        
-        if (!users[uName]) {
-            users[uName] = uPhoto;
-        }
-    }
-
-    for (const [name, photo] of Object.entries(users)) {
-        // 1. القائمة النصية القديمة
-        if (list) {
-            const div = document.createElement('div');
-            div.className = 'online-user';
-            div.innerHTML = `<div class="online-dot"></div> ${name}`;
-            list.appendChild(div);
-        }
-
-        // 2. كرات المتصلين (اليوميات) - النسخة المصلحة هندسياً
-        if (bubbleList) {
-            const container = document.createElement('div');
-            // تأكدنا من استخدام flex-shrink لمنع الانضغاط
-            container.style = "display: inline-flex; flex-direction: column; align-items: center; gap: 8px; min-width: 70px; flex-shrink: 0; padding-bottom: 5px;";
-            
-            container.innerHTML = `
-                <div style="position: relative; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center;">
-                    <img src="${photo}" 
-                         style="width: 50px; height: 50px; border-radius: 50%; border: 2px solid #00c851; 
-                                object-fit: cover; aspect-ratio: 1 / 1; display: block;
-                                animation: glow-green 1.5s infinite alternate; box-shadow: 0 0 10px rgba(0,200,81,0.3);"
-                         onerror="this.src='https://ui-avatars.com/api/?name=${name}'">
-                    <div style="position: absolute; bottom: 2px; right: 2px; width: 12px; height: 12px; background: #00c851; border: 2px solid #151515; border-radius: 50%;"></div>
-                </div>
-                <span style="font-size: 0.7rem; color: #eee; font-weight: 500; text-shadow: 1px 1px 2px #000; max-width: 65px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                    ${name === username ? 'أنت' : name}
-                </span>
-            `;
-            bubbleList.appendChild(container);
-        }
-    }
-}
 
 // دالة فتح نافذة التعديل وجلب البيانات
 window.editMoment = async function(id) {
@@ -3788,6 +3738,45 @@ if (supabaseClient) {
     }).subscribe();
 }
 
+// دالة فتح النافذة
+function openAvatarModal(clickedName, clickedPhoto) {
+    const modal = document.getElementById('avatar-view-modal');
+    const nameEl = document.getElementById('avatar-user-name');
+    const imgEl = document.getElementById('avatar-large-img');
+    const editBtn = document.getElementById('edit-avatar-btn');
+
+    // تعبئة البيانات
+    nameEl.innerText = clickedName;
+    imgEl.src = clickedPhoto;
+    
+    // إظهار زر التعديل فقط إذا كان الحساب لك
+    // ملاحظة: تأكد أن متغير username هو نفسه المستخدم في نظامك
+    if (clickedName === username) {
+        editBtn.style.display = 'block';
+    } else {
+        editBtn.style.display = 'none';
+    }
+
+    modal.style.display = 'flex';
+}
+
+// دالة إغلاق النافذة
+function closeAvatarModal() {
+    document.getElementById('avatar-view-modal').style.display = 'none';
+}
+
+// دالة ربط القلم بزر الرفع الموجود عندك مسبقاً
+function triggerAvatarUpload() {
+    // نبحث عن زر "تغيير الصورة" الأصلي في موقعك ونضغط عليه برمجياً
+    const originalUploadBtn = document.getElementById('change-photo-btn'); 
+    if (originalUploadBtn) {
+        originalUploadBtn.click();
+        closeAvatarModal();
+    } else {
+        alert("لم يتم العثور على زر رفع الصور الأصلي");
+    }
+}
+
 
 
 </script>
@@ -3871,6 +3860,24 @@ if (supabaseClient) {
         <button onclick="closeEditModal()" style="width:100%; margin-top:10px; background:transparent; color:#888; border:none; cursor:pointer;">تراجع</button>
     </div>
 </div>
+
+<div id="avatar-view-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 99999; align-items: center; justify-content: center; direction: rtl;">
+    <div style="background: #1a1a1a; width: 320px; padding: 30px; border-radius: 25px; text-align: center; border: 1px solid #333; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        
+        <button onclick="closeAvatarModal()" style="position: absolute; top: 15px; left: 15px; background: none; border: none; color: #fff; font-size: 20px; cursor: pointer;">✕</button>
+        
+        <h3 id="avatar-user-name" style="color: #00c851; margin-bottom: 20px; font-family: sans-serif;">اسم المستخدم</h3>
+        
+        <div style="position: relative; width: 160px; height: 160px; margin: 0 auto;">
+            <img id="avatar-large-img" src="" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; border: 3px solid #00c851; padding: 3px;">
+            
+            <button id="edit-avatar-btn" onclick="triggerAvatarUpload()" style="display: none; position: absolute; bottom: 5px; right: 5px; background: #00c851; border: none; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; font-size: 18px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">✏️</button>
+        </div>
+        
+        <p style="color: #888; margin-top: 20px; font-size: 13px;">ملف التعريف الشخصي</p>
+    </div>
+</div>
+
 
 
 </body>
