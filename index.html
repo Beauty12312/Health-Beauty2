@@ -3752,23 +3752,40 @@ window.closePostModal = function() {
     document.getElementById('create-post-modal').style.display = 'none';
 };
 
-// تعريف المتغير في أعلى السكريبت ليكون عاماً (Global)
+// متغير عالمي للتحكم في حالة المؤقت داخل القسم الخاص
 var privateTimerEnabled = false; 
 
-function togglePrivateTimer() {
-    privateTimerEnabled = !privateTimerEnabled;
-    const btn = document.getElementById('private-timer-btn');
-    
-    // سحب الثواني من إعدادات الموقع العامة (المجلة)
-    const seconds = (typeof appSettings !== 'undefined' && appSettings.deleteSeconds) ? appSettings.deleteSeconds : 7;
+// دالة التحكم بالمؤقت عبر السيرفر (لتفعيلها عند الجميع)
+async function togglePrivateTimer() {
+    if (!supabaseClient) return;
 
-    if (privateTimerEnabled) {
-        btn.classList.replace('pulse-off', 'pulse-on');
-        console.log("المؤقت نشط في البرايفت: " + seconds + " ثانية");
-    } else {
-        btn.classList.replace('pulse-on', 'pulse-off');
-        console.log("المؤقت معطل في البرايفت");
-    }
+    // عكس الحالة الحالية (إذا كان مغلقاً يفتح والعكس)
+    const newState = !privateTimerEnabled;
+
+    // تحديث قاعدة البيانات ليعرف الجميع أن المؤقت تفعّل
+    const { error } = await supabaseClient.from('settings').update({ 
+        private_timer_enabled: newState 
+    }).eq('id', 1);
+
+    if (error) console.error("فشل مزامنة المؤقت:", error);
+}
+
+// إضافة مستمع للتغييرات (Realtime) لتحديث لون الزر عند الجميع فوراً
+if (supabaseClient) {
+    supabaseClient.channel('private-timer-sync')
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'settings' }, (payload) => {
+        if (payload.new.private_timer_enabled !== undefined) {
+            privateTimerEnabled = payload.new.private_timer_enabled;
+            const btn = document.getElementById('private-timer-btn');
+            if (btn) {
+                if (privateTimerEnabled) {
+                    btn.classList.replace('pulse-off', 'pulse-on');
+                } else {
+                    btn.classList.replace('pulse-on', 'pulse-off');
+                }
+            }
+        }
+    }).subscribe();
 }
 
 
