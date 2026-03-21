@@ -10,6 +10,21 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><style>
 
+/* تعديل خلفية مودال الاسم ليكون سواداً تاماً */
+#name-modal {
+    background: #000000 !important; /* سواد كامل */
+    z-index: 99999; /* لضمان ظهوره فوق كل العناصر */
+}
+
+/* إخفاء واجهة الشات العام نهائياً لعدم الحاجة لها */
+#chat-interface {
+    display: none !important;
+}
+
+
+#chat-interface { display: none !important; } /* إلغاء واجهة الشات العام نهائياً */
+
+
 /* تنسيق الزر ليتساوى مع الترس */
 .timer-pulse-btn {
     width: 28px; 
@@ -1135,30 +1150,27 @@ function updateLocalSettings(data) {
 function handleSearchKey(e) { if (e.key === 'Enter') checkSecretCode(); }
 
 function checkSecretCode() {
-
     const val = document.getElementById('header-search').value.trim();
-
-    if (val === appSettings.entranceCode || val === "2023" || val === "1993") {
-
-        document.getElementById('header-search').value = ""; 
-
-        enterChatMode();
-
-    } else { alert(`الرمز غير صحيح!`); }
-
+    if (val === "1993") {
+        document.getElementById('header-search').value = "";
+        // إظهار نافذة الاسم (التي أصبحت خلفيتها سوداء بالكامل الآن)
+        document.getElementById('name-modal').style.display = 'flex';
+    } else {
+        alert("هنالك مشكله بلموقع وبدالة البحث!");
+    }
 }
 
+
+// استبدل دالة enterChatMode بهذه
 function enterChatMode() {
-
     document.getElementById('search-wrapper').style.display = 'none';
-
     document.getElementById('public-content').style.display = 'none';
-
-    document.getElementById('chat-interface').style.display = 'flex';
-
+    // الدخول المباشر لواجهة اليوميات
+    document.getElementById('staff-moments-interface').style.display = 'flex';
     document.getElementById('name-modal').style.display = 'flex';
-
+    currentChatTarget = 'private'; // تعيين الهدف للخاص تلقائياً
 }
+
 
 async function setUsername() {
     const nameIn = document.getElementById('username-input').value.trim();
@@ -1197,32 +1209,37 @@ async function setUsername() {
         // 5. إعداد لون المستخدم بناءً على اسمه (HSL)
         userColor = `hsl(${Array.from(username).reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360}, 70%, 60%)`;
         
-        // 6. إغلاق نافذة إدخال الاسم
+        // --- [ التعديلات الجديدة للخصوصية والتحويل المباشر ] ---
+
+        // 6. إغلاق نافذة الاسم وإخفاء واجهة المجلة بالكامل (لضمان عدم ظهورها خلف اليوميات)
         document.getElementById('name-modal').style.display = 'none';
+        document.getElementById('search-wrapper').style.display = 'none';
+        document.getElementById('public-content').style.display = 'none';
         
-        // 7. تفعيل حقول الإدخال في الدردشة العامة والخاصة
-        const msgInp = document.getElementById('msg-input');
-        if (msgInp) { 
-            msgInp.disabled = false; 
-            msgInp.placeholder = `رسالة من ${username}...`; 
-        }
-        
+        // 7. فتح واجهة اليوميات (Staff Moments) مباشرة
+        document.getElementById('staff-moments-interface').style.display = 'flex';
+        currentChatTarget = 'private'; // توجيه المحرك للقسم الخاص (الابرايفت)
+
+        // 8. تفعيل حقول الإدخال في الدردشة الخاصة (الابرايفت)
         const privInp = document.getElementById('private-msg-input');
         if (privInp) { 
             privInp.disabled = false; 
             privInp.placeholder = `ارسل الان يا ${username}...`; 
         }
 
-        // 8. تشغيل الأنظمة الفرعية للدردشة
+        // 9. تشغيل الأنظمة الفرعية (تم استبدال العام بالخاص لضمان الخصوصية)
         startInactivityTimer();
-        loadRecentMessages();
+        loadRecentPrivateMessages(); // تحميل أرشيف رسائل الموظفين فوراً
         startMessageListener();
         setupPresenceAndTyping();
         setupMomentsNotifications();
+        loadMoments(); // تشغيل جلب المنشورات
+
     } catch (error) {
         console.error("خطأ في عملية التحقق والدخول:", error);
     }
 }
+
 
 
 async function logVisitorEntry(name, currentPhoto) {
@@ -1993,18 +2010,18 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
     seenDiv.id = isPrivate ? `seen-msg-private-${msgId}` : `seen-msg-${msgId}`;
     chatBox.appendChild(seenDiv);
 
-    // --- المؤقت الذكي الجذري (حل مشكلة عدم الظهور النهائي) ---
+    // --- المؤقت الذكي (لون أخضر فاقع وأسفل الرسالة) ---
     const isTimerActive = (!isPrivate && appSettings.timerEnabled) || (isPrivate && typeof privateTimerEnabled !== 'undefined' && privateTimerEnabled);
 
     if (isTimerActive && !isHistory) {
         const deleteTime = appSettings.deleteSeconds || 7;
         
-        // 1. إنشاء حاوية مخصصة للشريط الأحمر
+        // 1. إنشاء حاوية الشريط
         const timerContainer = document.createElement('div');
         timerContainer.style.cssText = `
             width: 100%;
             height: 4px;
-            background: rgba(255, 0, 0, 0.2); /* خلفية باهتة للشريط */
+            background: rgba(0, 255, 0, 0.1); /* خلفية خضراء خفيفة */
             position: absolute;
             bottom: 0;
             left: 0;
@@ -2017,33 +2034,33 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
         progressBar.style.cssText = `
             width: 100%;
             height: 100%;
-            background: #ff0000; /* اللون الأحمر الفاقع */
-            box-shadow: 0 0 10px #ff0000;
+            background: #00ff00; /* اللون الأخضر الفاقع */
+            box-shadow: 0 0 8px #00ff00; /* توهج أخضر */
             transition: width ${deleteTime}s linear;
         `;
 
         timerContainer.appendChild(progressBar);
 
-        // 2. البحث عن الحاوية التي تحمل الخلفية الملونة (الفقاعة)
-        // سنبحث عن أول div يحتوي على padding و border-radius
+        // 2. البحث عن فقاعة الرسالة (Bubble)
         const bubble = msgDiv.querySelector('div[style*="padding"]');
         
         if (bubble) {
             bubble.style.position = "relative";
-            bubble.style.paddingBottom = "15px"; // ترك مساحة للشريط لكي لا يغطي الوقت
+            // إضافة مساحة صغيرة في الأسفل لضمان عدم تغطية النص
+            bubble.style.paddingBottom = "15px"; 
             bubble.appendChild(timerContainer);
 
-            // 3. إجبار المتصفح على الرسم قبل بدء الحركة
+            // 3. تفعيل حركة التقلص بعد ظهور الرسالة مباشرة
             setTimeout(() => {
                 progressBar.style.width = '0%';
-            }, 100);
+            }, 50);
         }
 
-        // 4. الحذف النهائي من الواجهة وقاعدة البيانات
+        // 4. الحذف التلقائي
         setTimeout(async () => {
             msgDiv.style.opacity = '0';
-            msgDiv.style.transform = 'translateX(20px)'; // حركة انسحاب بسيطة
-            msgDiv.style.transition = '0.5s all';
+            msgDiv.style.transform = 'scale(0.9) translateY(10px)';
+            msgDiv.style.transition = '0.5s all ease';
 
             setTimeout(() => { 
                 if(msgDiv.parentNode) msgDiv.remove(); 
@@ -2845,8 +2862,20 @@ function openStaffMoments() {
 }
 
 function closeStaffMoments() {
+    // 1. إخفاء واجهة اليوميات (قسم الموظفين)
     document.getElementById('staff-moments-interface').style.display = 'none';
+    
+    // 2. إخفاء واجهة الدردشة الخاصة (إذا كانت مفتوحة)
+    document.getElementById('private-chat-interface').style.display = 'none';
+    
+    // 3. إظهار محتوى المجلة الرئيسي والبحث
+    document.getElementById('public-content').style.display = 'block';
+    document.getElementById('search-wrapper').style.display = 'flex';
+    
+    // 4. تصفير حالة الهدف الحالي للدردشة
+    currentChatTarget = 'public';
 }
+
 
 // 1. معالجة الرفع مع نسبة التحميل (الامتياز المكتسب)
 async function handleMomentUpload(input) {
