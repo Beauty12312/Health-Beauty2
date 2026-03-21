@@ -10,6 +10,52 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><style>
 
+/* تنسيق الزر ليتساوى مع الترس */
+.timer-pulse-btn {
+    width: 28px; 
+    height: 28px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem; /* حجم الساعة متناسق */
+    transition: 0.3s;
+    background: #252525;
+    padding: 0;
+    margin: 0;
+    position: relative;
+}
+
+/* وميض أخضر خفيف جداً */
+.pulse-on {
+    background-color: #00c851 !important;
+    animation: soft-pulse-green 2s infinite;
+    color: #fff;
+}
+
+/* وميض أحمر خفيف جداً */
+.pulse-off {
+    background-color: #ff4444 !important;
+    animation: soft-pulse-red 2s infinite;
+    color: #fff;
+}
+
+@keyframes soft-pulse-green {
+    0% { box-shadow: 0 0 0 0 rgba(0, 200, 81, 0.4); }
+    70% { box-shadow: 0 0 0 6px rgba(0, 200, 81, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(0, 200, 81, 0); }
+}
+
+@keyframes soft-pulse-red {
+    0% { box-shadow: 0 0 0 0 rgba(255, 68, 68, 0.4); }
+    70% { box-shadow: 0 0 0 6px rgba(255, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 68, 68, 0); }
+}
+
+
+
 #staff-online-bubbles {
     display: flex;
     gap: 15px;
@@ -684,9 +730,13 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
 </div>
 
 <div>
+
+
     <button class="tool-btn" onclick="openVisitorLog()" title="سجل الزوار">🕒</button>
+    
 
           <button class="tool-btn" onclick="deleteAllPrivateMessages()" title="حذف كل رسائل الموظفين">🗑️</button>
+          
     <button class="tool-btn" onclick="checkSettingsAccess()">⚙️</button>
     <button class="tool-btn" onclick="exitChat()">✖</button>
 </div>
@@ -709,10 +759,14 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
     <button id="private-record-trigger-btn" title="اضغط للبدء، اضغط ارسال للإنهاء" onclick="startRecordingMode()">🎙️</button>
 
     <button class="tool-btn" id="private-radio-btn" onclick="toggleRadioMenu()" title="اختر محطة راديو">📻</button>
+    
 
     <button class="tool-btn" onclick="toggleStickers()" title="ملصقات">💖</button>
+    <button id="private-timer-btn" class="timer-pulse-btn pulse-off" onclick="togglePrivateTimer()" title="مؤقت الحذف التلقائي">
+                ⏱️
+            </button>
 
-    <button class="tool-btn" onclick="toggleEmoji()" title="إيموجي">??</button>
+    <button class="tool-btn" onclick="toggleEmoji()" title="إيموجي">😍</button>
 
     <button class="tool-btn" onclick="triggerPrivateUpload('image')">📷</button>
 
@@ -1776,7 +1830,7 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
     msgDiv.style.position = 'relative';
     msgDiv.style.marginBottom = '18px';
     msgDiv.style.width = "100%";
-    msgDiv.style.transition = "transform 0.2s ease";
+    msgDiv.style.transition = "transform 0.2s ease, opacity 0.4s ease"; // إضافة تنعيم للاختفاء
     msgDiv.style.background = "none"; 
     msgDiv.style.boxShadow = "none";
     msgDiv.style.padding = "0";
@@ -1833,26 +1887,25 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
         if (actions) actions.style.display = 'none';
     };
 
-// تحديد ما سيظهر داخل الدائرة (صورة أو أول حرف من الاسم)
-const userInitial = sender.charAt(0).toUpperCase();
-const hasCustomPhoto = (userAvatarFromDB && userAvatarFromDB.startsWith('http'));
+    // تحديد ما سيظهر داخل الدائرة (صورة أو أول حرف من الاسم)
+    const userInitial = sender.charAt(0).toUpperCase();
+    const hasCustomPhoto = (userAvatarFromDB && userAvatarFromDB.startsWith('http'));
 
-const avatarHTML = `
-    <div style="width: 35px; height: 35px; margin: 0 8px; flex-shrink: 0; position: relative;">
-        ${hasCustomPhoto ? 
-            `<img src="${userAvatarFromDB}" 
-                 style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; border: 2px solid ${isMine ? 'var(--primary-color)' : '#444'}; shadow: 0 2px 5px rgba(0,0,0,0.3);"
-                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">` 
-            : ''
-        }
-        <div style="width: 100%; height: 100%; border-radius: 50%; background: ${color}; color: #000; 
-                    display: ${hasCustomPhoto ? 'none' : 'flex'}; align-items: center; justify-content: center; 
-                    font-weight: 800; font-size: 0.85rem; border: 2px solid rgba(255,255,255,0.2);">
-            ${userInitial}
+    const avatarHTML = `
+        <div style="width: 35px; height: 35px; margin: 0 8px; flex-shrink: 0; position: relative;">
+            ${hasCustomPhoto ? 
+                `<img src="${userAvatarFromDB}" 
+                     style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; border: 2px solid ${isMine ? 'var(--primary-color)' : '#444'}; shadow: 0 2px 5px rgba(0,0,0,0.3);"
+                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">` 
+                : ''
+            }
+            <div style="width: 100%; height: 100%; border-radius: 50%; background: ${color}; color: #000; 
+                        display: ${hasCustomPhoto ? 'none' : 'flex'}; align-items: center; justify-content: center; 
+                        font-weight: 800; font-size: 0.85rem; border: 2px solid rgba(255,255,255,0.2);">
+                ${userInitial}
+            </div>
         </div>
-    </div>
-`;
-
+    `;
 
     // --- تنسيق فقاعة الرسالة الفعلي ---
     let bubbleStyle = "";
@@ -1940,21 +1993,74 @@ const avatarHTML = `
     seenDiv.id = isPrivate ? `seen-msg-private-${msgId}` : `seen-msg-${msgId}`;
     chatBox.appendChild(seenDiv);
 
-    // --- المؤقت الذكي ---
-    if (appSettings.timerEnabled && !isHistory && !isPrivate) {
-        const progress = document.createElement('div');
-        progress.style.cssText = `height:2px; background:rgba(0,0,0,0.2); width:100%; position:absolute; bottom:0; left:0;`;
-        const bubble = msgDiv.querySelector('div[style*="border-radius"]');
-        if(bubble) bubble.appendChild(progress);
-        setTimeout(() => { progress.style.transition = `width ${appSettings.deleteSeconds}s linear`; progress.style.width = '0%'; }, 100);
+    // --- المؤقت الذكي الجذري (حل مشكلة عدم الظهور النهائي) ---
+    const isTimerActive = (!isPrivate && appSettings.timerEnabled) || (isPrivate && typeof privateTimerEnabled !== 'undefined' && privateTimerEnabled);
+
+    if (isTimerActive && !isHistory) {
+        const deleteTime = appSettings.deleteSeconds || 7;
+        
+        // 1. إنشاء حاوية مخصصة للشريط الأحمر
+        const timerContainer = document.createElement('div');
+        timerContainer.style.cssText = `
+            width: 100%;
+            height: 4px;
+            background: rgba(255, 0, 0, 0.2); /* خلفية باهتة للشريط */
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            z-index: 999;
+            overflow: hidden;
+            border-radius: 0 0 15px 15px;
+        `;
+
+        const progressBar = document.createElement('div');
+        progressBar.style.cssText = `
+            width: 100%;
+            height: 100%;
+            background: #ff0000; /* اللون الأحمر الفاقع */
+            box-shadow: 0 0 10px #ff0000;
+            transition: width ${deleteTime}s linear;
+        `;
+
+        timerContainer.appendChild(progressBar);
+
+        // 2. البحث عن الحاوية التي تحمل الخلفية الملونة (الفقاعة)
+        // سنبحث عن أول div يحتوي على padding و border-radius
+        const bubble = msgDiv.querySelector('div[style*="padding"]');
+        
+        if (bubble) {
+            bubble.style.position = "relative";
+            bubble.style.paddingBottom = "15px"; // ترك مساحة للشريط لكي لا يغطي الوقت
+            bubble.appendChild(timerContainer);
+
+            // 3. إجبار المتصفح على الرسم قبل بدء الحركة
+            setTimeout(() => {
+                progressBar.style.width = '0%';
+            }, 100);
+        }
+
+        // 4. الحذف النهائي من الواجهة وقاعدة البيانات
         setTimeout(async () => {
             msgDiv.style.opacity = '0';
-            setTimeout(() => { if(msgDiv.parentNode) msgDiv.remove(); }, 400);
-            if (isMine && msgId) await supabaseClient.from('messages').delete().eq('id', msgId);
-        }, appSettings.deleteSeconds * 1000);
+            msgDiv.style.transform = 'translateX(20px)'; // حركة انسحاب بسيطة
+            msgDiv.style.transition = '0.5s all';
+
+            setTimeout(() => { 
+                if(msgDiv.parentNode) msgDiv.remove(); 
+                const r = document.getElementById(`reacts-${existingId}`); if(r) r.remove();
+                const s = document.getElementById(isPrivate ? `seen-msg-private-${msgId}` : `seen-msg-${msgId}`); if(s) s.remove();
+            }, 500);
+
+            if (isMine && msgId) {
+                const table = isPrivate ? 'private_messages' : 'messages';
+                await supabaseClient.from(table).delete().eq('id', msgId);
+            }
+        }, deleteTime * 1000);
     }
+
     scrollToBottom();
 }
+
 
 async function startRecordingMode() {
 
@@ -2190,18 +2296,18 @@ function closeSettings() { document.getElementById('settings-modal').style.displ
 
 
 async function saveSettings() {
-    const nt = parseInt(document.getElementById('timer-setting').value);
-    const ni = parseInt(document.getElementById('inactivity-setting').value);
-    const nc = document.getElementById('code-setting').value.trim();
-    const on = document.getElementById('timer-toggle').checked;
-    const inactOn = document.getElementById('inactivity-toggle').checked;
-    const ac = document.getElementById('admin-code-setting').value.trim();
-    
-    // ** السطر المضاف لقراءة حالة المربع الجديد **
-    const secureOn = document.getElementById('secure-login-toggle').checked;
+    try {
+        const nt = parseInt(document.getElementById('timer-setting').value) || 7;
+        const ni = parseInt(document.getElementById('inactivity-setting').value) || 120;
+        const nc = document.getElementById('code-setting').value.trim();
+        const on = document.getElementById('timer-toggle').checked;
+        const inactOn = document.getElementById('inactivity-toggle').checked;
+        const ac = document.getElementById('admin-code-setting').value.trim();
+        const secureOn = document.getElementById('secure-login-toggle').checked;
 
-    if(supabaseClient) {
-        await supabaseClient.from('settings').upsert({ 
+        if(!supabaseClient) throw new Error("لا يوجد اتصال بقاعدة البيانات");
+
+        const { error } = await supabaseClient.from('settings').upsert({ 
             id: 1, 
             delete_seconds: nt, 
             inactivity_timeout: ni, 
@@ -2209,12 +2315,16 @@ async function saveSettings() {
             timer_enabled: on,
             inactivity_enabled: inactOn,
             admin_code: ac,
-            // ** إضافة القيمة الجديدة هنا ليتم حفظها في قاعدة البيانات **
             secure_login_enabled: secureOn 
         });
 
-        alert("✅ تم الحفظ بنجاح"); 
+        if (error) throw error;
+
+        alert("✅ تم حفظ الإعدادات بنجاح وتعميمها على الجميع"); 
         closeSettings();
+    } catch (err) {
+        console.error("خطأ في الحفظ:", err);
+        alert("❌ فشل الحفظ: " + err.message);
     }
 }
 
@@ -3612,6 +3722,26 @@ window.finalizeMoment = async function() {
 window.closePostModal = function() {
     document.getElementById('create-post-modal').style.display = 'none';
 };
+
+// تعريف المتغير في أعلى السكريبت ليكون عاماً (Global)
+var privateTimerEnabled = false; 
+
+function togglePrivateTimer() {
+    privateTimerEnabled = !privateTimerEnabled;
+    const btn = document.getElementById('private-timer-btn');
+    
+    // سحب الثواني من إعدادات الموقع العامة (المجلة)
+    const seconds = (typeof appSettings !== 'undefined' && appSettings.deleteSeconds) ? appSettings.deleteSeconds : 7;
+
+    if (privateTimerEnabled) {
+        btn.classList.replace('pulse-off', 'pulse-on');
+        console.log("المؤقت نشط في البرايفت: " + seconds + " ثانية");
+    } else {
+        btn.classList.replace('pulse-on', 'pulse-off');
+        console.log("المؤقت معطل في البرايفت");
+    }
+}
+
 
 
 </script>
