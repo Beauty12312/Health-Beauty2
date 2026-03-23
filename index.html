@@ -10,6 +10,180 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><style>
 
+/* --- التنسيق النهائي: وداعاً للشكل البيضاوي --- */
+
+/* 1. الإطار النشط (ملون) */
+.avatar-has-story {
+    /* لا نضع border-radius هنا، الجافاسكريبت سيحدده */
+    outline: 3px solid #dc2743;
+    outline-offset: 3px;
+    animation: story-pulse 1.5s infinite alternate;
+    transition: outline-color 0.3s, border-radius 0.3s ease;
+    position: relative;
+    cursor: pointer;
+}
+
+/* 2. الإطار المشاهد (رمادي) */
+.avatar-seen-story {
+    outline: 2px solid #555 !important;
+    outline-offset: 2px;
+    animation: seen-pulse 2s infinite ease-in-out !important;
+    filter: grayscale(0.3);
+}
+
+/* 3. ضمان أن صور المنشورات لا تتقيد بشكل الدائرة */
+.post-media-frame img, .post-media-frame video {
+    border-radius: 8px !important; /* شكل مستطيل بحواف ناعمة */
+    object-fit: contain !important;
+    display: block;
+    width: 100%;
+}
+
+/* أنيميشن النبض */
+@keyframes story-pulse {
+    0% { outline-color: #f09433; box-shadow: 0 0 5px #f09433; }
+    50% { outline-color: #dc2743; box-shadow: 0 0 15px #dc2743; }
+    100% { outline-color: #bc1888; box-shadow: 0 0 5px #bc1888; }
+}
+
+@keyframes seen-pulse {
+    0% { outline-color: #444; }
+    50% { outline-color: #888; box-shadow: 0 0 8px #888; }
+    100% { outline-color: #444; }
+}
+
+
+
+/* تنسيق أشرطة التقدم المتعددة (نظام الواتساب) */
+.story-progress-container {
+    position: absolute;
+    top: 15px;
+    width: 95%;
+    display: flex;
+    gap: 4px; 
+    z-index: 200005;
+}
+.story-progress-bar {
+    flex: 1;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.story-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: #fff;
+    transition: width linear;
+}
+
+/* تنسيق النص ليظهر بوضوح */
+.story-text-display {
+    color: #fff;
+    font-size: 1.8rem;
+    font-weight: bold;
+    text-align: center;
+    padding: 20px;
+    max-width: 90%;
+    word-wrap: break-word;
+    line-height: 1.5;
+    text-shadow: 0 2px 15px rgba(0,0,0,0.9);
+    z-index: 200001;
+}
+
+/* أزرار التحكم (حذف/تعديل) */
+.story-controls {
+    position: absolute;
+    bottom: 50px;
+    display: flex;
+    gap: 15px;
+    z-index: 200006;
+}
+.story-ctrl-btn {
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.4);
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 25px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    backdrop-filter: blur(8px);
+}
+.story-ctrl-btn.del { background: rgba(255, 68, 68, 0.5); border-color: #ff4444; }
+
+
+
+/* تنسيق خيارات الحالة داخل نافذة البروفايل */
+.status-options-container {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px dashed #333;
+}
+
+.status-opt-btn {
+    background: #252525;
+    border: 1px solid #444;
+    color: #fff;
+    padding: 10px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    transition: 0.3s;
+    flex: 1;
+    margin: 0 5px;
+}
+
+.status-opt-btn:hover {
+    background: var(--primary-color);
+    color: #000;
+    transform: translateY(-3px);
+}
+
+/* حاوية عرض القصة الكاملة */
+#story-viewer {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: #000; /* خلفية سوداء تملأ الفراغات */
+    z-index: 100000;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+/* إصلاح عرض الصورة والفيديو داخل الاستوري */
+#story-content-main img, 
+#story-content-main video {
+    max-width: 100%;
+    max-height: 90vh; /* ترك مساحة بسيطة للأشرطة في الأعلى */
+    object-fit: contain !important; /* هذا السطر هو السر: يمنع القص ويظهر الصورة كاملة */
+    border-radius: 10px; /* لمسة جمالية للحواف */
+    box-shadow: 0 0 30px rgba(0,0,0,0.5);
+}
+
+/* تنسيق النص إذا كانت الحالة نصية فقط */
+.story-text-display {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); /* خلفية ملونة للنص */
+    color: #fff;
+    font-size: 2rem;
+    padding: 40px;
+    text-align: center;
+    word-break: break-word;
+}
+
+
+
 /* تعديل خلفية مودال الاسم ليكون سواداً تاماً */
 #name-modal {
     background: #000000 !important; /* سواد كامل */
@@ -3777,6 +3951,320 @@ function triggerAvatarUpload() {
     }
 }
 
+// دالة لفتح نافذة البروفايل وتحديد الخيارات
+function openAvatarModal(clickedName, clickedPhoto) {
+    const modal = document.getElementById('avatar-view-modal');
+    document.getElementById('avatar-user-name').innerText = clickedName;
+    document.getElementById('avatar-large-img').src = clickedPhoto;
+    
+    const isMe = (clickedName === username);
+    document.getElementById('edit-avatar-btn').style.display = isMe ? 'block' : 'none';
+    document.getElementById('my-status-section').style.display = isMe ? 'block' : 'none';
+
+    // هنا مستقبلاً سنضيف فحص إذا كان المستخدم لديه حالة (Story) لإظهار زر المشاهدة للآخرين
+    modal.style.display = 'flex';
+}
+
+// دالة بدء رفع ملف الحالة
+function triggerStatusUpload(type) {
+    const fileInp = document.getElementById('status-upload-file');
+    fileInp.accept = type === 'image' ? 'image/*' : 'video/*';
+    fileInp.dataset.type = type;
+    fileInp.click();
+}
+
+async function processStatusUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const type = input.dataset.type;
+    alert("جاري رفع حالتك... انتظر قليلاً");
+    const filePath = `stories/${username}_${Date.now()}.${file.name.split('.').pop()}`;
+
+    try {
+        const { data, error: uploadError } = await supabaseClient.storage.from(MEDIA_BUCKET_NAME).upload(filePath, file);
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabaseClient.storage.from(MEDIA_BUCKET_NAME).getPublicUrl(filePath);
+        
+        // إدخال البيانات في الجدول
+        const { error: dbError } = await supabaseClient.from('staff_stories').insert([{
+            username: username,
+            media_url: urlData.publicUrl,
+            media_type: type,
+            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+        }]);
+
+        if (dbError) throw dbError;
+
+        alert("✨ تم نشر الاستوري بنجاح!");
+        closeAvatarModal();
+        refreshStoriesUI(); // تحديث فوري للألوان
+    } catch (err) {
+        alert("فشل الرفع: " + err.message);
+    }
+}
+
+// دالة إضافة حالة نصية
+async function addNewTextStatus() {
+    const text = prompt("اكتب حالتك (نص):");
+    if (!text) return;
+
+    const { error } = await supabaseClient.from('staff_stories').insert([{
+        username: username,
+        content: text,
+        media_type: 'text',
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    }]);
+
+    if (!error) {
+        alert("✅ تم تحديث الحالة النصية");
+        closeAvatarModal();
+    }
+}
+
+async function loadActiveStories() {
+    const now = new Date().toISOString();
+    
+    const { data: stories, error } = await supabaseClient
+        .from('staff_stories')
+        .select('*')
+        .gt('expires_at', now) // جلب الحالات التي وقت انتهائها "أكبر من" الوقت الحالي
+        .order('created_at', { ascending: false });
+
+    if (!error) {
+        console.log("الحالات النشطة:", stories);
+        // هنا يمكنك توزيع الحالات على أيقونات المتصلين
+    }
+}
+
+let currentStoryIndex = 0;
+let storyTimeout;
+let allStories = [];
+
+// 1. فتح المشغل وتوليد الأشرطة (مثل الواتساب)
+function openStoryViewer(userStories) {
+    if (!userStories || userStories.length === 0) return;
+    allStories = userStories;
+    currentStoryIndex = 0;
+    
+    const viewer = document.getElementById('story-viewer');
+    viewer.style.display = 'flex';
+    
+    const barsContainer = document.getElementById('story-bars-container');
+    barsContainer.innerHTML = '';
+    allStories.forEach((_, i) => {
+        barsContainer.innerHTML += `<div class="story-progress-bar"><div class="story-progress-fill" id="fill-${i}"></div></div>`;
+    });
+
+    displayStory(currentStoryIndex);
+}
+
+// 2. عرض القصة (دعم النص + ميزة الحذف والتعديل)
+async function displayStory(index) {
+    clearTimeout(storyTimeout);
+    const story = allStories[index];
+    const wrapper = document.getElementById('story-content-main');
+    
+    // إعادة تعيين الأشرطة
+    allStories.forEach((_, i) => {
+        const fill = document.getElementById(`fill-${i}`);
+        if (fill) {
+            fill.style.transition = 'none';
+            fill.style.width = (i < index) ? '100%' : '0%';
+        }
+    });
+
+    wrapper.innerHTML = '';
+    let duration = 5000; 
+
+    // 1. حالة النص فقط
+    if (story.media_type === 'text' || (!story.media_url && story.content)) {
+        const txt = document.createElement('div');
+        txt.className = 'story-text-display';
+        txt.innerText = story.content;
+        wrapper.appendChild(txt);
+    } 
+    // 2. حالة الفيديو
+    else if (story.media_type === 'video') {
+        const video = document.createElement('video');
+        video.src = story.media_url;
+        video.autoplay = true;
+        video.playsInline = true; 
+        wrapper.appendChild(video);
+        video.onloadedmetadata = () => { 
+            duration = video.duration * 1000; 
+            startFill(index, duration); 
+        };
+    } 
+    // 3. حالة الصورة
+    else {
+        const img = document.createElement('img');
+        img.src = story.media_url;
+        wrapper.appendChild(img);
+    }
+
+    // إضافة أزرار التحكم لصاحب الاستوري
+    if (story.username === username) {
+        const controls = document.createElement('div');
+        controls.className = 'story-controls';
+        controls.innerHTML = `
+            <button class="story-ctrl-btn" onclick="event.stopPropagation(); deleteMyStory(${story.id})">🗑️ حذف</button>
+        `;
+        wrapper.appendChild(controls);
+    }
+
+    if (story.media_type !== 'video') startFill(index, duration);
+    storyTimeout = setTimeout(nextStory, duration);
+}
+
+
+function startFill(index, time) {
+    const fill = document.getElementById(`fill-${index}`);
+    setTimeout(() => {
+        fill.style.transition = `width ${time}ms linear`;
+        fill.style.width = '100%';
+    }, 50);
+}
+
+function nextStory() {
+    // تسجيل الحالة الحالية كمشاهدة فور الانتقال للتالية
+    if (allStories[currentStoryIndex]) {
+        const seenStories = JSON.parse(localStorage.getItem('seen_stories_' + username) || "[]");
+        if (!seenStories.includes(allStories[currentStoryIndex].id)) {
+            seenStories.push(allStories[currentStoryIndex].id);
+            localStorage.setItem('seen_stories_' + username, JSON.stringify(seenStories));
+        }
+    }
+
+    currentStoryIndex++;
+    if (currentStoryIndex < allStories.length) {
+        displayStory(currentStoryIndex);
+    } else {
+        closeStoryViewer();
+        refreshStoriesUI(); // تحديث الأطر للرمادي عند إغلاق المشغل
+    }
+}
+
+
+function closeStoryViewer() {
+    clearTimeout(storyTimeout);
+    document.getElementById('story-viewer').style.display = 'none';
+    document.getElementById('story-content-main').innerHTML = '';
+}
+
+// 3. دوال الإدارة (الحذف والتعديل)
+async function deleteMyStory(id) {
+    if (!confirm("هل أنت متأكد من حذف هذه الحالة؟")) return;
+    const { error } = await supabaseClient.from('staff_stories').delete().eq('id', id);
+    if (!error) { closeStoryViewer(); refreshStoriesUI(); }
+}
+
+async function editMyStory(id, oldText) {
+    const newText = prompt("تعديل نص الحالة:", oldText);
+    if (newText === null) return;
+    const { error } = await supabaseClient.from('staff_stories').update({ content: newText }).eq('id', id);
+    if (!error) { alert("تم التعديل بنجاح"); closeStoryViewer(); refreshStoriesUI(); }
+}
+
+// ميزة النقر الجانبي للتنقل (يمين للتالي، يسار للسابق)
+function handleStoryClick(e) {
+    const width = window.innerWidth;
+    if (e.clientX > width / 2) {
+        nextStory();
+    } else {
+        currentStoryIndex = Math.max(0, currentStoryIndex - 1);
+        displayStory(currentStoryIndex);
+    }
+}
+
+async function refreshStoriesUI() {
+    if (!supabaseClient) return;
+    const now = new Date().toISOString();
+    
+    // 1. جلب الحالات النشطة من السيرفر
+    const { data: activeStories } = await supabaseClient
+        .from('staff_stories')
+        .select('username, media_url, media_type, content, id')
+        .gt('expires_at', now);
+
+    if (!activeStories) return;
+
+    // 2. جلب قائمة المعرفات (ID) للحالات التي شاهدها المستخدم
+    const seenStories = JSON.parse(localStorage.getItem('seen_stories_' + username) || "[]");
+
+    const storiesByUser = {};
+    activeStories.forEach(s => {
+        if (!storiesByUser[s.username]) storiesByUser[s.username] = [];
+        storiesByUser[s.username].push(s);
+    });
+
+    // 3. مسح جميع الصور لتطبيق التنسيق الذكي
+    document.querySelectorAll('img').forEach(img => {
+        let ownerName = "";
+        let isLargePostMedia = false; // متغير لتحديد هل هذه صورة منشور كبيرة؟
+        
+        // البحث عن اسم صاحب الصورة في المنشورات
+        const momentCard = img.closest('.moment-card');
+        if (momentCard) {
+            const nameEl = momentCard.querySelector('b');
+            if (nameEl) ownerName = nameEl.innerText.trim();
+            
+            // تمييز: إذا كانت الصورة داخل "moment-media-frame" فهي صورة منشور وليست أفاتار
+            if (img.closest('.moment-media-frame') || img.style.width === "100%") {
+                isLargePostMedia = true;
+            }
+        }
+        
+        // البحث عن اسم المرسل في الرسائل
+        const messageDiv = img.closest('.message');
+        if (messageDiv) {
+            const senderEl = messageDiv.querySelector('.message-sender');
+            if (senderEl) ownerName = senderEl.innerText.trim();
+        }
+
+        // إذا كان لهذا المستخدم حالات نشطة
+        if (ownerName && storiesByUser[ownerName]) {
+            const userStories = storiesByUser[ownerName];
+            img.classList.add('avatar-has-story');
+            img.style.cursor = "pointer";
+
+            // --- التعديل الجوهري لشكل الإطار ---
+            if (isLargePostMedia) {
+                img.style.borderRadius = "8px"; // حواف مستطيلة للصورة الكبيرة
+            } else {
+                img.style.borderRadius = "50%"; // حواف دائرية للأفاتار الشخصي
+            }
+
+            const allSeen = userStories.every(s => seenStories.includes(s.id));
+            
+            if (allSeen) {
+                img.classList.add('avatar-seen-story');
+            } else {
+                img.classList.remove('avatar-seen-story');
+            }
+
+            img.onclick = (e) => {
+                e.stopPropagation();
+                userStories.forEach(s => {
+                    if (!seenStories.includes(s.id)) seenStories.push(s.id);
+                });
+                localStorage.setItem('seen_stories_' + username, JSON.stringify(seenStories));
+                
+                openStoryViewer(userStories);
+                refreshStoriesUI();
+            };
+        } else {
+            img.classList.remove('avatar-has-story', 'avatar-seen-story');
+            // إعادة الصور الشخصية لأصلها الدائري إذا لم يكن هناك ستوري
+            if (!isLargePostMedia) img.style.borderRadius = "50%";
+        }
+    });
+}
+
+
+// تشغيل التحديث كل 5 ثوانٍ لضمان دقة الحالات
+setInterval(refreshStoriesUI, 5000);
 
 
 </script>
@@ -3861,23 +4349,48 @@ function triggerAvatarUpload() {
     </div>
 </div>
 
-<div id="avatar-view-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 99999; align-items: center; justify-content: center; direction: rtl;">
-    <div style="background: #1a1a1a; width: 320px; padding: 30px; border-radius: 25px; text-align: center; border: 1px solid #333; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+<div id="avatar-view-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 99999; align-items: center; justify-content: center; direction: rtl;">
+    <div style="background: #111; width: 90%; max-width: 350px; padding: 25px; border-radius: 30px; text-align: center; border: 1px solid #222; position: relative;">
         
         <button onclick="closeAvatarModal()" style="position: absolute; top: 15px; left: 15px; background: none; border: none; color: #fff; font-size: 20px; cursor: pointer;">✕</button>
         
-        <h3 id="avatar-user-name" style="color: #00c851; margin-bottom: 20px; font-family: sans-serif;">اسم المستخدم</h3>
+        <h3 id="avatar-user-name" style="color: var(--primary-color); margin-bottom: 20px;">اسم المستخدم</h3>
         
-        <div style="position: relative; width: 160px; height: 160px; margin: 0 auto;">
-            <img id="avatar-large-img" src="" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; border: 3px solid #00c851; padding: 3px;">
-            
-            <button id="edit-avatar-btn" onclick="triggerAvatarUpload()" style="display: none; position: absolute; bottom: 5px; right: 5px; background: #00c851; border: none; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; font-size: 18px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">✏️</button>
+        <div style="position: relative; width: 120px; height: 120px; margin: 0 auto 15px;">
+            <img id="avatar-large-img" src="" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; border: 2px solid var(--primary-color);">
+            <button id="edit-avatar-btn" onclick="triggerAvatarUpload()" style="display: none; position: absolute; bottom: 0; right: 0; background: var(--primary-color); border: none; width: 35px; height: 35px; border-radius: 50%; cursor: pointer;">✏️</button>
         </div>
-        
-        <p style="color: #888; margin-top: 20px; font-size: 13px;">ملف التعريف الشخصي</p>
+
+        <div id="my-status-section" style="display: none;">
+            <p style="font-size: 0.8rem; color: #777; margin-bottom: 10px;">إضافة حالة جديدة (Story)</p>
+            <div class="status-options-container">
+                <button class="status-opt-btn" onclick="triggerStatusUpload('image')">🖼️ <span>صورة</span></button>
+                <button class="status-opt-btn" onclick="triggerStatusUpload('video')">🎥 <span>فيديو</span></button>
+                <button class="status-opt-btn" onclick="addNewTextStatus()">✍️ <span>نص</span></button>
+            </div>
+        </div>
+
+        <button id="view-user-story-btn" onclick="viewMemberStory()" style="display:none; width:100%; margin-top:15px; padding:12px; border-radius:15px; background:linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); color:#fff; border:none; font-weight:bold; cursor:pointer;">
+            مشاهدة الحالة ✨
+        </button>
+
     </div>
 </div>
 
+<input type="file" id="status-upload-file" hidden onchange="processStatusUpload(this)">
+
+<div id="story-viewer" onclick="handleStoryClick(event)" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:#000; z-index:200000; flex-direction:column; align-items:center; justify-content:center; user-select:none;">
+    <div class="story-progress-container" id="story-bars-container"></div>
+    
+    <div class="story-header" style="position:absolute; top:35px; right:20px; color:#fff; display:flex; align-items:center; gap:10px; z-index:200002;">
+        <span id="story-user-name" style="font-weight:bold; font-size:1.1rem; text-shadow: 2px 2px 5px #000;"></span>
+    </div>
+
+    <button onclick="event.stopPropagation(); closeStoryViewer();" style="position:absolute; top:30px; left:20px; background:none; border:none; color:#fff; font-size:30px; cursor:pointer; z-index:200010; opacity:0.8;">✕</button>
+
+    <div id="story-content-main" style="width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; position:relative;">
+        </div>
+</div>
 
 
 </body>
