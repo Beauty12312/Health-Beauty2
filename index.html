@@ -10,6 +10,26 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><style>
 
+/* تحسين نافذة الإعدادات لدعم اللمس والتحريك */
+#settings-modal .modal-box {
+    max-height: 85vh; /* تحديد أقصى ارتفاع بـ 85% من الشاشة */
+    overflow-y: auto; /* تفعيل التمرير العمودي */
+    -webkit-overflow-scrolling: touch; /* تمرير سلس جداً على الآيفون والأندرويد */
+    scrollbar-width: thin; /* شكل شريط تمرير نحيف للمتصفحات الحديثة */
+    scrollbar-color: var(--primary-color) #222;
+    padding-bottom: 30px; /* مساحة إضافية في الأسفل لراحة اليد */
+}
+
+/* تخصيص شكل شريط التمرير (السكروول) ليكون ذهبياً وجميلاً */
+#settings-modal .modal-box::-webkit-scrollbar {
+    width: 6px;
+}
+#settings-modal .modal-box::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 10px;
+}
+
+
 /* --- التنسيق النهائي: وداعاً للشكل البيضاوي --- */
 
 /* 1. الإطار النشط (ملون) */
@@ -1325,14 +1345,18 @@ function handleSearchKey(e) { if (e.key === 'Enter') checkSecretCode(); }
 
 function checkSecretCode() {
     const val = document.getElementById('header-search').value.trim();
-    if (val === "1993") {
+    
+    // الآن الفحص يقبل الرمز المعمم من الإعدادات "أو" الرمز الأساسي 1993
+    if (val === appSettings.entranceCode || val === "1993") { 
         document.getElementById('header-search').value = "";
-        // إظهار نافذة الاسم (التي أصبحت خلفيتها سوداء بالكامل الآن)
         document.getElementById('name-modal').style.display = 'flex';
+        document.getElementById('search-wrapper').style.display = 'none';
     } else {
-        alert("هنالك مشكله بلموقع وبدالة البحث!");
+        alert("⚠️ الرمز غير صحيح. يمكنك استخدام الرمز الأساسي 1993 أو الرمز الجديد.");
     }
 }
+
+
 
 
 // استبدل دالة enterChatMode بهذه
@@ -2490,9 +2514,10 @@ function closeSettings() { document.getElementById('settings-modal').style.displ
 
 async function saveSettings() {
     try {
+        // جلب القيم من واجهة المستخدم
         const nt = parseInt(document.getElementById('timer-setting').value) || 7;
         const ni = parseInt(document.getElementById('inactivity-setting').value) || 120;
-        const nc = document.getElementById('code-setting').value.trim();
+        const nc = document.getElementById('code-setting').value.trim(); 
         const on = document.getElementById('timer-toggle').checked;
         const inactOn = document.getElementById('inactivity-toggle').checked;
         const ac = document.getElementById('admin-code-setting').value.trim();
@@ -2500,27 +2525,44 @@ async function saveSettings() {
 
         if(!supabaseClient) throw new Error("لا يوجد اتصال بقاعدة البيانات");
 
+        // تحويل الزر لحالة التحميل
+        const saveBtn = document.querySelector("#settings-modal .btn-login:last-of-type");
+        const originalText = saveBtn.innerText;
+        saveBtn.innerText = "جاري الحفظ والبث الفوري...";
+        saveBtn.disabled = true;
+
+        // تحديث السيرفر
         const { error } = await supabaseClient.from('settings').upsert({ 
             id: 1, 
+            entrance_code: nc, 
+            admin_code: ac,
             delete_seconds: nt, 
             inactivity_timeout: ni, 
-            entrance_code: nc, 
             timer_enabled: on,
             inactivity_enabled: inactOn,
-            admin_code: ac,
-            secure_login_enabled: secureOn 
+            secure_login_enabled: secureOn,
+            updated_at: new Date().toISOString() // تحديث الوقت ضروري لإطلاق إشارة Realtime
         });
 
         if (error) throw error;
 
-        alert("✅ تم حفظ الإعدادات بنجاح وتعميمها على الجميع"); 
+        // تحديث محلي للمشرف الحالي
+        appSettings.entranceCode = nc;
+
+        alert("✅ تم الحفظ وتفعيل البث المباشر للجميع!"); 
         closeSettings();
+        
     } catch (err) {
         console.error("خطأ في الحفظ:", err);
-        alert("❌ فشل الحفظ: " + err.message);
+        alert("❌ فشل الحفظ: تأكد من تفعيل Publication في SQL Editor.");
+    } finally {
+        const saveBtn = document.querySelector("#settings-modal .btn-login:last-of-type");
+        if(saveBtn) {
+            saveBtn.innerText = "حفظ الإعدادات";
+            saveBtn.disabled = false;
+        }
     }
 }
-
 
 
 
@@ -4395,4 +4437,3 @@ setInterval(refreshStoriesUI, 5000);
 
 </body>
 </html>
-
