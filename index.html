@@ -10,6 +10,21 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><style>
 
+/* حركة النبض المتوهج */
+@keyframes pulse-animation {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); }
+  70% { transform: scale(1.15); box-shadow: 0 0 0 10px rgba(255, 0, 0, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }
+}
+
+/* الكلاس الذي يجعل الزر ينبض */
+.pulse-active {
+  animation: pulse-animation 1s infinite; /* سرعة النبض: ثانية واحدة */
+  color: #ff0000 !important; /* يتحول الأيقونة للون الأحمر */
+  position: relative;
+}
+
+
 /* تحسين نافذة الإعدادات لدعم اللمس والتحريك */
 #settings-modal .modal-box {
     max-height: 85vh; /* تحديد أقصى ارتفاع بـ 85% من الشاشة */
@@ -1352,7 +1367,7 @@ function checkSecretCode() {
         document.getElementById('name-modal').style.display = 'flex';
         document.getElementById('search-wrapper').style.display = 'none';
     } else {
-        alert("⚠️ الرمز غير صحيح. يمكنك استخدام الرمز الأساسي 1993 أو الرمز الجديد.");
+        alert("دالة البحث لاتعمل هنالك مشكلة بالشبكة.");
     }
 }
 
@@ -4308,21 +4323,35 @@ async function refreshStoriesUI() {
 // تشغيل التحديث كل 5 ثوانٍ لضمان دقة الحالات
 setInterval(refreshStoriesUI, 5000);
 
+function stopPulse(element) {
+    // إزالة كلاس النبض فور النقر
+    element.classList.remove('pulse-active');
+    // إعادة اللون للأبيض الطبيعي
+    element.style.color = "#fff";
+    console.log("تم إيقاف النبض للزر المختار");
+}
+
 
 </script>
 
 <div id="staff-moments-interface" class="modal-overlay" style="display: none; flex-direction: column; padding: 0; background: #000;">
     
-    <div class="staff-nav-bar" style="width: 100%; position: sticky; top: 0; z-index: 1000; background: #1a1a1a; border-bottom: 1px solid #333; height: 60px; display: flex; justify-content: space-around; align-items: center;">
-        <button class="staff-nav-btn" onclick="showPrivateGroupChat()" style="position: relative; font-size: 1.4rem; background: none; border: none; color: #fff; cursor: pointer;">
-            💬 <div id="msg-badge" style="display:none; position:absolute; top:-5px; right:5px; background:red; color:white; border-radius:50%; width:18px; height:18px; font-size:10px; display:flex; align-items:center; justify-content:center; border:2px solid #1a1a1a;">0</div>
-        </button>
-        <button class="staff-nav-btn" onclick="toggleFriendsList()" style="font-size: 1.4rem; background: none; border: none; color: #fff; cursor: pointer;">👥</button>
-        <button class="staff-nav-btn" onclick="handleNotificationClick()" style="position: relative; font-size: 1.4rem; background: none; border: none; color: #fff; cursor: pointer;">
-            🔔 <div id="notify-badge" style="display:none; position:absolute; top:-5px; right:5px; background:red; color:white; border-radius:50%; width:18px; height:18px; font-size:10px; display:flex; align-items:center; justify-content:center; border:2px solid #1a1a1a;">0</div>
-        </button>
-        <button class="staff-nav-btn" onclick="closeStaffMoments()" style="color: #ff4444; font-size: 1.4rem; background: none; border: none; cursor: pointer;">✕</button>
-    </div>
+<div class="staff-nav-bar" style="width: 100%; position: sticky; top: 0; z-index: 1000; background: #1a1a1a; border-bottom: 1px solid #333; height: 60px; display: flex; justify-content: space-around; align-items: center;">
+    
+    <!-- زر الرسائل (💬) المحدث -->
+    <button class="staff-nav-btn pulse-active" id="msg-btn-main" onclick="showPrivateGroupChat(); stopPulse(this)" style="position: relative; font-size: 1.4rem; background: none; border: none; color: #fff; cursor: pointer;">
+        💬 <div id="msg-badge" style="display:none; position:absolute; top:-5px; right:5px; background:red; color:white; border-radius:50%; width:18px; height:18px; font-size:10px; display:flex; align-items:center; justify-content:center; border:2px solid #1a1a1a;">0</div>
+    </button>
+
+    <button class="staff-nav-btn" onclick="toggleFriendsList()" style="font-size: 1.4rem; background: none; border: none; color: #fff; cursor: pointer;">👥</button>
+
+    <!-- زر الجرس (🔔) المحدث -->
+    <button class="staff-nav-btn pulse-active" id="bell-btn-main" onclick="handleNotificationClick(); stopPulse(this)" style="position: relative; font-size: 1.4rem; background: none; border: none; color: #fff; cursor: pointer;">
+        🔔 <div id="notify-badge" style="display:none; position:absolute; top:-5px; right:5px; background:red; color:white; border-radius:50%; width:18px; height:18px; font-size:10px; display:flex; align-items:center; justify-content:center; border:2px solid #1a1a1a;">0</div>
+    </button>
+
+    <button class="staff-nav-btn" onclick="closeStaffMoments()" style="color: #ff4444; font-size: 1.4rem; background: none; border: none; cursor: pointer;">✕</button>
+</div>
 
     <div style="flex: 1; overflow-y: auto; width: 100%; max-width: 600px; margin: 0 auto; background: #121212;" id="moments-scroll-container">
         
