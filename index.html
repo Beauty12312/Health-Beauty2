@@ -10,6 +10,33 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><style>
 
+@keyframes pulse-red-bg {
+    0% { background: rgba(255, 0, 0, 0.05); }
+    50% { background: rgba(255, 0, 0, 0.2); border-right-color: #ff0000; }
+    100% { background: rgba(255, 0, 0, 0.05); }
+}
+
+
+/* تعديل النبض الأحمر للرسائل والإشعارات */
+.pulse-active {
+    animation: pulse-animation 1.2s infinite !important;
+    color: #ff4444 !important;
+}
+
+
+@keyframes pulse-red-border {
+    0% { border-color: #ff0000; box-shadow: 0 0 5px #ff0000; }
+    50% { border-color: transparent; box-shadow: 0 0 0px transparent; }
+    100% { border-color: #ff0000; box-shadow: 0 0 5px #ff0000; }
+}
+
+/* تمييز التعليق الجديد أيضاً داخل اليوميات */
+.new-comment-highlight {
+    background: rgba(255, 0, 0, 0.1) !important;
+    border-right: 3px solid red !important;
+}
+
+
 /* حركة النبض المتوهج */
 @keyframes pulse-animation {
   0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); }
@@ -1447,6 +1474,8 @@ async function setUsername() {
         setupPresenceAndTyping();
         setupMomentsNotifications();
         loadMoments(); // تشغيل جلب المنشورات
+        checkUnreadOnLogin();
+        setupStaffNotifications();
 
     } catch (error) {
         console.error("خطأ في عملية التحقق والدخول:", error);
@@ -2271,6 +2300,17 @@ function appendMessageToUI(sender, content, type, color, isMine, isHistory, msgI
             }, 50);
         }
 
+// جلب حالة القراءة المسجلة (يمكنك تخزينها في متغير عند الدخول لسرعة الأداء)
+const lastSeenIdServer = window.myLastSeenId || 0; 
+
+if (!isMine && !isHistory && msgId > lastSeenIdServer) {
+    // تمييز الرسالة بإطار أحمر نابض
+    msgDiv.style.border = "2px solid red";
+    msgDiv.style.borderRadius = "15px";
+    msgDiv.style.animation = "pulse-red-border 1.5s infinite";
+}
+
+
         // 4. الحذف التلقائي
         setTimeout(async () => {
             msgDiv.style.opacity = '0';
@@ -2715,19 +2755,6 @@ function openPrivateChat() {
     loadMoments(); // تحميل اليوميات فور الدخول
 }
 
-// 2. دالة لفتح شات المجموعة (الدردشة الخاصة بالموظفين)
-function showPrivateGroupChat() {
-    document.getElementById('staff-moments-interface').style.display = 'none';
-    document.getElementById('private-chat-interface').style.display = 'flex';
-    loadRecentPrivateMessages();
-}
-
-// 3. دالة للعودة من الشات إلى اليوميات
-function backToMoments() {
-    document.getElementById('private-chat-interface').style.display = 'none';
-    document.getElementById('staff-moments-interface').style.display = 'flex';
-    loadMoments();
-}
 
 // 4. نظام قائمة الزملاء لبدء شات فردي (تجهيز مستقبلي)
 function toggleFriendsList() {
@@ -3604,33 +3631,46 @@ async function handleToggleLike(momentId, currentLikes) {
 
 
 
-// أضف هذا الكود داخل دالة startMessageListener أو بجانبها
 function setupStaffNotifications() {
     if (!supabaseClient) return;
 
-    // 1. مراقبة الرسائل الجديدة لزيادة عداد الرسائل
+    // 1. مراقبة الرسائل الخاصة الجديدة
     supabaseClient.channel('private_messages_notify')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'private_messages' }, (payload) => {
-            // إذا كانت الواجهة الحالية هي اليوميات (وليس الشات)، نزيد العداد
-            if (document.getElementById('staff-moments-interface').style.display === 'flex' && payload.new.sender_name !== username) {
-                unreadMsgs++;
-                updateBadgesUI();
+            // نزيد العداد فقط إذا كان المرسل شخصاً آخر وكان المستخدم ليس في واجهة الدردشة حالياً
+            const isChatOpen = document.getElementById('private-chat-interface').style.display === 'flex';
+            
+            if (payload.new.sender_name !== username) {
+                if (!isChatOpen) {
+                    unreadMsgs++;
+                    updateBadgesUI();
+                    // تفعيل النبض للزر
+                    document.getElementById('msg-btn-main').classList.add('pulse-active');
+                }
             }
         }).subscribe();
 
     // 2. مراقبة التعليقات الجديدة في اليوميات
     supabaseClient.channel('moments_updates')
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'staff_moments' }, (payload) => {
-            // إذا قام شخص آخر بالتعليق
-            if (payload.new.comments.length > payload.old.comments.length) {
-                const lastComment = payload.new.comments[payload.new.comments.length - 1];
-                if (lastComment.user !== username) {
-                    unreadNotifications++;
-                    updateBadgesUI();
+            const isMomentsOpen = document.getElementById('staff-moments-interface').style.display === 'flex';
+            
+            if (payload.new.username === username) { // إذا كان المنشور لي
+                const oldComments = payload.old.comments || [];
+                const newComments = payload.new.comments || [];
+
+                if (newComments.length > oldComments.length) {
+                    const lastComment = newComments[newComments.length - 1];
+                    if (lastComment.user !== username) {
+                        unreadNotifications++;
+                        updateBadgesUI();
+                        // تفعيل النبض للجرس
+                        document.getElementById('bell-btn-main').classList.add('pulse-active');
+                    }
                 }
             }
-            // تحديث اليوميات تلقائياً عند أي لايك أو تعليق جديد
-            loadMoments();
+            // تحديث اليوميات تلقائياً لرؤية التعليق فوراً
+            if (isMomentsOpen) loadMoments();
         }).subscribe();
 }
 
@@ -3638,16 +3678,17 @@ function updateBadgesUI() {
     const msgBadge = document.getElementById('msg-badge');
     const notifyBadge = document.getElementById('notify-badge');
 
-    if (unreadMsgs > 0) {
+    if (msgBadge) {
         msgBadge.innerText = unreadMsgs;
-        msgBadge.style.display = 'flex';
+        msgBadge.style.display = unreadMsgs > 0 ? 'flex' : 'none';
     }
     
-    if (unreadNotifications > 0) {
+    if (notifyBadge) {
         notifyBadge.innerText = unreadNotifications;
-        notifyBadge.style.display = 'flex';
+        notifyBadge.style.display = unreadNotifications > 0 ? 'flex' : 'none';
     }
 }
+
 
 // دالة لتصفير العدادات عند الدخول للقسم
 function resetMsgBadge() {
@@ -3660,12 +3701,81 @@ function resetNotifyBadge() {
     document.getElementById('notify-badge').style.display = 'none';
 }
 
-// تعديل دالة فتح شات الموظفين لتصفير العداد
-function showPrivateGroupChat() {
-    resetMsgBadge(); // تصفير عداد الرسائل
+
+async function showPrivateGroupChat() {
+    // 1. إيقاف النبض فوراً وتصفير العداد محلياً
+    unreadMsgs = 0;
+    updateBadgesUI();
+    const msgBtn = document.getElementById('msg-btn-main');
+    if(msgBtn) {
+        msgBtn.classList.remove('pulse-active');
+        msgBtn.style.color = "#fff";
+    }
+
+    // 2. جلب ID آخر رسالة موجودة في السيرفر حالياً
+    const { data } = await supabaseClient
+        .from('private_messages')
+        .select('id')
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+    
+    // 3. تحديث السيرفر بأن هذه الرسالة هي "آخر ما قرأت"
+    if (data) {
+        await updateMyReadStatus('msg', data.id);
+        // تخزينها في متغير عالمي للمقارنة لاحقاً
+        window.myLastSeenMsgId = data.id; 
+    }
+
+    // 4. الانتقال للواجهة
     document.getElementById('staff-moments-interface').style.display = 'none';
     document.getElementById('private-chat-interface').style.display = 'flex';
+    currentChatTarget = 'private';
     loadRecentPrivateMessages();
+}
+
+
+async function handleNotificationClick() {
+    // 1. تصفير العداد والنبض فوراً
+    unreadNotifications = 0;
+    updateBadgesUI();
+    const bellBtn = document.getElementById('bell-btn-main');
+    if(bellBtn) {
+        bellBtn.classList.remove('pulse-active');
+        bellBtn.style.color = "#fff";
+    }
+    
+    // 2. تحديث السيرفر (SQL) بوقت المشاهدة الحالي
+    const nowISO = new Date().toISOString();
+    await updateMyReadStatus('notif', nowISO);
+    window.myLastSeenNotifTime = nowISO; // تحديث الذاكرة المحلية للمقارنة الفورية
+
+    // 3. جلب المنشورات والتعليقات
+    const { data: myMoments } = await supabaseClient
+        .from('staff_moments')
+        .select('id, comments')
+        .eq('username', username);
+
+    let myNotifications = [];
+    if (myMoments) {
+        myMoments.forEach(m => {
+            if (m.comments) {
+                m.comments.forEach(c => {
+                    if (c.user !== username) {
+                        // إضافة حالة "جديد" للتعليق إذا كان أحدث من وقت المشاهدة السابق
+                        const isNew = c.created_at > (window.myLastSeenNotifTimeBeforeClick || '2000-01-01');
+                        myNotifications.push({ ...c, momentId: m.id, isNew: isNew });
+                    }
+                });
+            }
+        });
+    }
+
+    // حفظ الوقت قبل التحديث للمرة القادمة لتمييز "الجديد" بالأحمر
+    window.myLastSeenNotifTimeBeforeClick = nowISO;
+
+    myNotifications.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    showNotificationDropdown(myNotifications.slice(0, 10));
 }
 
 // 1. إعداد مراقبة التنبيهات لليوميات
@@ -3749,42 +3859,39 @@ async function handleNotificationClick() {
 
 
 function showNotificationDropdown(comments) {
-    // إزالة أي قائمة سابقة
     const oldMenu = document.getElementById('notif-dropdown');
     if (oldMenu) oldMenu.remove();
 
     const dropdown = document.createElement('div');
     dropdown.id = 'notif-dropdown';
-    dropdown.style = `
-        position: fixed; top: 60px; left: 50%; transform: translateX(-50%);
-        width: 90%; max-width: 350px; background: #222; border: 1px solid var(--primary-color);
-        border-radius: 12px; z-index: 20000; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-        max-height: 400px; overflow-y: auto; direction: rtl;
-    `;
+    dropdown.style = `position:fixed; top:70px; left:50%; transform:translateX(-50%); width:90%; max-width:350px; background:#1a1a1a; border:1px solid var(--primary-color); border-radius:15px; z-index:200000; box-shadow:0 10px 40px #000; max-height:450px; overflow-y:auto;`;
 
-    let html = `<div style="padding:10px; border-bottom:1px solid #333; font-weight:bold; color:var(--primary-color); text-align:center;">التنبيهات الأخيرة</div>`;
+    let html = `<div style="padding:15px; border-bottom:1px solid #333; font-weight:bold; color:var(--primary-color); text-align:center; background:#222;">🔔 التعليقات الواردة</div>`;
     
-    if (comments.length === 0) {
-        html += `<div style="padding:20px; text-align:center; color:#888;">لا توجد تنبيهات جديدة</div>`;
-    } else {
-        comments.forEach(c => {
-            html += `
-                <div style="padding:12px; border-bottom:1px solid #222; cursor:pointer; display:flex; gap:10px; align-items:center;" 
-                     onclick="goToMoment(${c.momentId})">
-                    <img src="${c.avatar || 'https://ui-avatars.com/api/?name='+c.user}" style="width:35px; height:35px; border-radius:50%;">
-                    <div style="flex:1;">
-                        <b style="font-size:0.85rem; color:#fff;">${c.user}</b>
-                        <p style="font-size:0.75rem; color:#aaa; margin:0;">علق على يومياتك: ${c.text}</p>
-                    </div>
-                </div>`;
-        });
-    }
+    comments.forEach((c, index) => {
+        const commentUniqueId = `${c.momentId}-${index}-${c.created_at}`;
+        const clickedComments = JSON.parse(localStorage.getItem('clicked_comments_' + username) || "[]");
+        const isNew = c.isActuallyNew && !clickedComments.includes(commentUniqueId);
 
-    html += `<button onclick="this.parentElement.remove()" style="width:100%; padding:10px; background:#333; border:none; color:#fff; cursor:pointer; border-radius:0 0 12px 12px;">إغلاق</button>`;
-    
+        // ستايل النبض الأحمر للتعليق الفردي
+        const pulseStyle = isNew ? `border-right: 4px solid red; background: rgba(255,0,0,0.1); animation: pulse-red-bg 1.5s infinite;` : ``;
+
+        html += `
+            <div id="notif-item-${index}" style="padding:15px; border-bottom:1px solid #252525; cursor:pointer; display:flex; gap:12px; align-items:center; transition:0.3s; ${pulseStyle}" 
+                 onclick="markCommentAsRead('${commentUniqueId}', ${c.momentId}, 'notif-item-${index}')">
+                <img src="${c.avatar || 'https://ui-avatars.com/api/?name='+c.user}" style="width:40px; height:40px; border-radius:50%; border:1px solid #444;">
+                <div style="flex:1;">
+                    <b style="font-size:0.85rem; color:var(--primary-color);">${c.user}</b>
+                    <p style="font-size:0.8rem; color:#ddd; margin:2px 0;">${c.text}</p>
+                </div>
+            </div>`;
+    });
+
+    html += `<button onclick="this.parentElement.remove()" style="width:100%; padding:12px; background:#333; border:none; color:#fff; cursor:pointer;">إغلاق</button>`;
     dropdown.innerHTML = html;
     document.body.appendChild(dropdown);
 }
+
 
 // دالة للانتقال للمنشور عند الضغط على التنبيه
 function goToMoment(id) {
@@ -4329,6 +4436,123 @@ function stopPulse(element) {
     // إعادة اللون للأبيض الطبيعي
     element.style.color = "#fff";
     console.log("تم إيقاف النبض للزر المختار");
+}
+
+async function updateMyReadStatus(type, value) {
+    if (!username) return;
+    
+    let updateData = { username: username };
+    if (type === 'msg') updateData.last_seen_msg_id = value;
+    if (type === 'notif') updateData.last_seen_notif_time = new Date().toISOString();
+
+    await supabaseClient.from('user_read_status').upsert(updateData, { onConflict: 'username' });
+}
+
+async function checkUnreadOnLogin() {
+    if (!supabaseClient || !username) return;
+
+    // 1. جلب سجل القراءة الخاص بي من الجدول الجديد (SQL)
+    const { data: status } = await supabaseClient
+        .from('user_read_status')
+        .select('*')
+        .eq('username', username)
+        .maybeSingle();
+
+    // تخزين القيم السابقة للمقارنة لتمييز "الجديد" باللون الأحمر
+    const lastSeenId = status ? status.last_seen_msg_id : 0;
+    const lastNotifTime = status ? status.last_seen_notif_time : '2000-01-01T00:00:00Z';
+    
+    // جلب قائمة التعليقات التي تم "النقر عليها" فعلياً من قبل لتجنب نبضها مرة أخرى
+    const clickedComments = JSON.parse(localStorage.getItem('clicked_comments_' + username) || "[]");
+
+    // حفظ القيم في window لاستخدامها في تمييز الرسائل/التعليقات بصرياً بالأحمر
+    window.myLastSeenMsgId = lastSeenId;
+    window.myLastSeenNotifTime = lastNotifTime;
+
+    // 2. فحص الرسائل الخاصة الجديدة (أكبر من آخر ID مسجل)
+    const { count: msgCount } = await supabaseClient
+        .from('private_messages')
+        .select('*', { count: 'exact', head: true })
+        .gt('id', lastSeenId)
+        .neq('sender_name', username);
+
+    if (msgCount && msgCount > 0) {
+        unreadMsgs = msgCount;
+        document.getElementById('msg-btn-main').classList.add('pulse-active');
+    } else {
+        unreadMsgs = 0;
+        document.getElementById('msg-btn-main').classList.remove('pulse-active');
+    }
+
+    // 3. فحص التعليقات الجديدة (أحدث من آخر وقت مشاهدة مسجل)
+    const { data: myMoments } = await supabaseClient
+        .from('staff_moments')
+        .select('id, comments')
+        .eq('username', username);
+
+    let newNotifs = 0;
+    if (myMoments) {
+        myMoments.forEach(m => {
+            if (m.comments) {
+                m.comments.forEach((c, index) => {
+                    // إنشاء معرف فريد لكل تعليق (ID المنشور + ترتيب التعليق + وقت التعليق)
+                    const commentUniqueId = `${m.id}-${index}-${c.created_at}`;
+                    
+                    // الشرط المحدث: النبض يظهر فقط إذا كان التعليق:
+                    // 1. ليس منك 2. أحدث من وقت المشاهدة في السيرفر 3. لم يتم الضغط عليه سابقاً (Clicked)
+                    if (c.user !== username && c.created_at > lastNotifTime && !clickedComments.includes(commentUniqueId)) {
+                        newNotifs++;
+                        // إضافة علامة "جديد" مؤقتة للكائن ليتم صبغها بالأحمر في القائمة
+                        c.isActuallyNew = true; 
+                        c.uniqueId = commentUniqueId;
+                        c.momentId = m.id;
+                    }
+                });
+            }
+        });
+    }
+
+    if (newNotifs > 0) {
+        unreadNotifications = newNotifs;
+        document.getElementById('bell-btn-main').classList.add('pulse-active');
+    } else {
+        unreadNotifications = 0;
+        document.getElementById('bell-btn-main').classList.remove('pulse-active');
+    }
+
+    // تحديث الأرقام على الأيقونات (Badges)
+    updateBadgesUI();
+}
+
+
+function markCommentAsRead(uniqueId, momentId, elementId) {
+    // 1. إضافة التعليق لقائمة "المقروء" في الذاكرة المحلية
+    let clickedComments = JSON.parse(localStorage.getItem('clicked_comments_' + username) || "[]");
+    if (!clickedComments.includes(uniqueId)) {
+        clickedComments.push(uniqueId);
+        localStorage.setItem('clicked_comments_' + username, JSON.stringify(clickedComments));
+        
+        // 2. إنقاص عداد الإشعارات فوراً
+        if (unreadNotifications > 0) unreadNotifications--;
+        updateBadgesUI();
+    }
+
+    // 3. إزالة تأثير النبض الأحمر من العنصر فوراً
+    const el = document.getElementById(elementId);
+    if (el) {
+        el.style.animation = "none";
+        el.style.background = "transparent";
+        el.style.borderRight = "none";
+    }
+
+    // 4. إذا لم يتبقَ أي إشعارات، أوقف نبض الجرس الرئيسي
+    if (unreadNotifications <= 0) {
+        document.getElementById('bell-btn-main').classList.remove('pulse-active');
+        document.getElementById('bell-btn-main').style.color = "#fff";
+    }
+
+    // 5. الانتقال للمنشور
+    goToMoment(momentId);
 }
 
 
