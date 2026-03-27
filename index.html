@@ -3736,7 +3736,7 @@ async function showPrivateGroupChat() {
 
 
 async function handleNotificationClick() {
-    // 1. تصفير العداد والنبض فوراً
+    // 1. تصفير عداد الجرس والنبض الرئيسي
     unreadNotifications = 0;
     updateBadgesUI();
     const bellBtn = document.getElementById('bell-btn-main');
@@ -3745,12 +3745,10 @@ async function handleNotificationClick() {
         bellBtn.style.color = "#fff";
     }
     
-    // 2. تحديث السيرفر (SQL) بوقت المشاهدة الحالي
-    const nowISO = new Date().toISOString();
-    await updateMyReadStatus('notif', nowISO);
-    window.myLastSeenNotifTime = nowISO; // تحديث الذاكرة المحلية للمقارنة الفورية
+    // 2. جلب وقت آخر مشاهدة مسجل بالسيرفر قبل التحديث الحالي
+    const lastSeenTimeServer = window.myLastSeenNotifTime || '2000-01-01';
 
-    // 3. جلب المنشورات والتعليقات
+    // 3. جلب منشوراتي لرؤية التعليقات
     const { data: myMoments } = await supabaseClient
         .from('staff_moments')
         .select('id, comments')
@@ -3760,22 +3758,24 @@ async function handleNotificationClick() {
     if (myMoments) {
         myMoments.forEach(m => {
             if (m.comments) {
-                m.comments.forEach(c => {
+                m.comments.forEach((c, index) => {
                     if (c.user !== username) {
-                        // إضافة حالة "جديد" للتعليق إذا كان أحدث من وقت المشاهدة السابق
-                        const isNew = c.created_at > (window.myLastSeenNotifTimeBeforeClick || '2000-01-01');
-                        myNotifications.push({ ...c, momentId: m.id, isNew: isNew });
+                        // التعليق يعتبر "جديد وينبض" إذا كان وقته أحدث من آخر دخول مسجل
+                        const isNew = c.created_at > lastSeenTimeServer;
+                        myNotifications.push({ ...c, momentId: m.id, isActuallyNew: isNew, index: index });
                     }
                 });
             }
         });
     }
 
-    // حفظ الوقت قبل التحديث للمرة القادمة لتمييز "الجديد" بالأحمر
-    window.myLastSeenNotifTimeBeforeClick = nowISO;
+    // 4. تحديث وقت المشاهدة في السيرفر الآن (لكي لا تنبض التعليقات في المرة القادمة)
+    const nowISO = new Date().toISOString();
+    await updateMyReadStatus('notif', nowISO);
+    window.myLastSeenNotifTime = nowISO; 
 
     myNotifications.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-    showNotificationDropdown(myNotifications.slice(0, 10));
+    showNotificationDropdown(myNotifications.slice(0, 15));
 }
 
 // 1. إعداد مراقبة التنبيهات لليوميات
@@ -3826,36 +3826,6 @@ function updateNotifyBadgeUI() {
     }
 }
 
-async function handleNotificationClick() {
-    unreadNotifications = 0;
-    document.getElementById('notify-badge').style.display = 'none';
-
-    // جلب المنشورات الخاصة بي فقط لرؤية من علق عليها
-    const { data: myMoments } = await supabaseClient
-        .from('staff_moments')
-        .select('id, comments')
-        .eq('username', username); // جلب منشوراتي أنا فقط
-
-    let myNotifications = [];
-    if (myMoments) {
-        myMoments.forEach(m => {
-            if (m.comments && Array.isArray(m.comments)) {
-                m.comments.forEach(c => {
-                    // استبعاد تعليقاتي أنا من قائمة التنبيهات
-                    if (c.user !== username) {
-                        myNotifications.push({ ...c, momentId: m.id });
-                    }
-                });
-            }
-        });
-    }
-
-    // ترتيب من الأحدث للأقدم
-    myNotifications.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-
-    // عرض القائمة المنسدلة (آخر 10 تنبيهات تخصك)
-    showNotificationDropdown(myNotifications.slice(0, 10));
-}
 
 
 function showNotificationDropdown(comments) {
@@ -3866,31 +3836,34 @@ function showNotificationDropdown(comments) {
     dropdown.id = 'notif-dropdown';
     dropdown.style = `position:fixed; top:70px; left:50%; transform:translateX(-50%); width:90%; max-width:350px; background:#1a1a1a; border:1px solid var(--primary-color); border-radius:15px; z-index:200000; box-shadow:0 10px 40px #000; max-height:450px; overflow-y:auto;`;
 
-    let html = `<div style="padding:15px; border-bottom:1px solid #333; font-weight:bold; color:var(--primary-color); text-align:center; background:#222;">🔔 التعليقات الواردة</div>`;
+    let html = `<div style="padding:15px; border-bottom:1px solid #333; font-weight:bold; color:var(--primary-color); text-align:center; background:#222;">🔔 التنبيهات الواردة</div>`;
     
-    comments.forEach((c, index) => {
-        const commentUniqueId = `${c.momentId}-${index}-${c.created_at}`;
-        const clickedComments = JSON.parse(localStorage.getItem('clicked_comments_' + username) || "[]");
-        const isNew = c.isActuallyNew && !clickedComments.includes(commentUniqueId);
+    if (comments.length === 0) {
+        html += `<div style="padding:20px; text-align:center; color:#666;">لا توجد تعليقات جديدة</div>`;
+    }
 
-        // ستايل النبض الأحمر للتعليق الفردي
-        const pulseStyle = isNew ? `border-right: 4px solid red; background: rgba(255,0,0,0.1); animation: pulse-red-bg 1.5s infinite;` : ``;
+    comments.forEach((c, i) => {
+        const commentUniqueId = `${c.momentId}-${c.index}-${c.created_at}`;
+        
+        // تطبيق النبض إذا كان التعليق جديداً
+        const pulseStyle = c.isActuallyNew ? `animation: pulse-red-bg 1.5s infinite; border-right: 3px solid red;` : ``;
 
         html += `
-            <div id="notif-item-${index}" style="padding:15px; border-bottom:1px solid #252525; cursor:pointer; display:flex; gap:12px; align-items:center; transition:0.3s; ${pulseStyle}" 
-                 onclick="markCommentAsRead('${commentUniqueId}', ${c.momentId}, 'notif-item-${index}')">
-                <img src="${c.avatar || 'https://ui-avatars.com/api/?name='+c.user}" style="width:40px; height:40px; border-radius:50%; border:1px solid #444;">
+            <div id="notif-item-${i}" style="padding:12px 15px; border-bottom:1px solid #252525; cursor:pointer; display:flex; gap:12px; align-items:center; transition:0.3s; ${pulseStyle}" 
+                 onclick="markCommentAsRead('${commentUniqueId}', ${c.momentId}, 'notif-item-${i}')">
+                <img src="${c.avatar || 'https://ui-avatars.com/api/?name='+c.user}" style="width:35px; height:35px; border-radius:50%; border:1px solid #444;">
                 <div style="flex:1;">
-                    <b style="font-size:0.85rem; color:var(--primary-color);">${c.user}</b>
-                    <p style="font-size:0.8rem; color:#ddd; margin:2px 0;">${c.text}</p>
+                    <b style="font-size:0.8rem; color:var(--primary-color);">${c.user}</b>
+                    <p style="font-size:0.75rem; color:#ddd; margin:0;">علّق: ${c.text}</p>
                 </div>
             </div>`;
     });
 
-    html += `<button onclick="this.parentElement.remove()" style="width:100%; padding:12px; background:#333; border:none; color:#fff; cursor:pointer;">إغلاق</button>`;
+    html += `<button onclick="this.parentElement.remove()" style="width:100%; padding:12px; background:#333; border:none; color:#fff; cursor:pointer; font-weight:bold;">إغلاق</button>`;
     dropdown.innerHTML = html;
     document.body.appendChild(dropdown);
 }
+
 
 
 // دالة للانتقال للمنشور عند الضغط على التنبيه
@@ -4526,35 +4499,39 @@ async function checkUnreadOnLogin() {
 
 
 function markCommentAsRead(uniqueId, momentId, elementId) {
-    // 1. إضافة التعليق لقائمة "المقروء" في الذاكرة المحلية
+    // 1. الوصول للعنصر في واجهة الإشعارات
+    const el = document.getElementById(elementId);
+    
+    // 2. [إضافة المطلوب]: إزالة تأثير النبض واللون الأحمر من التعليق فوراً عند النقر
+    if (el) {
+        el.style.animation = "none"; // إيقاف أنيميشن pulse-red-bg
+        el.style.background = "transparent"; // إزالة الخلفية الحمراء
+        el.style.borderRight = "none"; // إزالة الإطار الأحمر الجانبي
+    }
+
+    // 3. إضافة التعليق لقائمة "المقروء" في الذاكرة المحلية (الامتياز الأصلي)
     let clickedComments = JSON.parse(localStorage.getItem('clicked_comments_' + username) || "[]");
     if (!clickedComments.includes(uniqueId)) {
         clickedComments.push(uniqueId);
         localStorage.setItem('clicked_comments_' + username, JSON.stringify(clickedComments));
         
-        // 2. إنقاص عداد الإشعارات فوراً
+        // 4. إنقاص عداد الإشعارات وتحديث الأرقام فوراً (الامتياز الأصلي)
         if (unreadNotifications > 0) unreadNotifications--;
         updateBadgesUI();
     }
 
-    // 3. إزالة تأثير النبض الأحمر من العنصر فوراً
-    const el = document.getElementById(elementId);
-    if (el) {
-        el.style.animation = "none";
-        el.style.background = "transparent";
-        el.style.borderRight = "none";
-    }
-
-    // 4. إذا لم يتبقَ أي إشعارات، أوقف نبض الجرس الرئيسي
+    // 5. إذا لم يتبقَ أي إشعارات غير مقروءة، أوقف نبض الجرس الرئيسي
     if (unreadNotifications <= 0) {
-        document.getElementById('bell-btn-main').classList.remove('pulse-active');
-        document.getElementById('bell-btn-main').style.color = "#fff";
+        const bellBtn = document.getElementById('bell-btn-main');
+        if (bellBtn) {
+            bellBtn.classList.remove('pulse-active');
+            bellBtn.style.color = "#fff";
+        }
     }
 
-    // 5. الانتقال للمنشور
+    // 6. الانتقال السلس للمنشور المستهدف
     goToMoment(momentId);
 }
-
 
 </script>
 
