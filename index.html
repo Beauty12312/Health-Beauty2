@@ -10,6 +10,93 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><style>
 
+/* منع الإطارات عن صور المنشورات والرسائل الكبيرة بشكل نهائي */
+.moment-media-frame img, 
+.message img:not(.user-avatar-img), 
+.article-card img,
+#view-img {
+    outline: none !important;
+    box-shadow: none !important;
+    border: none !important;
+    animation: none !important;
+}
+
+/* التأكد من أن الأفاتار فقط هو من يأخذ الانيميشن */
+.user-avatar-img.avatar-has-story,
+#staff-online-bubbles img.avatar-has-story {
+    /* الإعدادات الافتراضية للنبض */
+}
+
+
+/* تنسيق قائمة الزوار الجانبية */
+.visitors-sidebar {
+    position: fixed;
+    top: 0;
+    left: -100%; /* مخفية في البداية */
+    width: 320px;
+    height: 100%;
+    background: #111;
+    z-index: 300000;
+    transition: 0.4s ease-in-out;
+    box-shadow: 5px 0 25px rgba(0,0,0,0.8);
+    border-right: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+}
+
+.visitors-sidebar.open {
+    left: 0;
+}
+
+.visitors-header {
+    padding: 20px;
+    background: #1a1a1a;
+    border-bottom: 1px solid var(--primary-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#visitors-list-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+}
+
+.visitor-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 15px 10px;
+    border-bottom: 1px solid #222;
+    transition: 0.3s;
+}
+
+.visitor-item:hover {
+    background: #181818;
+}
+
+/* حالة الأونلاين (النبض الأخضر) */
+.status-online-pulse {
+    outline: 2px solid #00c851;
+    outline-offset: 2px;
+    animation: glow-green 1.5s infinite alternate;
+}
+
+/* حالة الستوري (الإطار الملون) - تأتي فوق النبض الأخضر */
+.status-story-active {
+    outline: 3px solid #dc2743 !important;
+    outline-offset: 3px !important;
+    animation: story-pulse 1.5s infinite alternate !important;
+}
+
+.status-story-seen {
+    outline: 2px solid #555 !important;
+    outline-offset: 2px !important;
+    animation: none !important;
+}
+
+
 @keyframes pulse-red-bg {
     0% { background: rgba(255, 0, 0, 0.05); }
     50% { background: rgba(255, 0, 0, 0.2); border-right-color: #ff0000; }
@@ -1154,6 +1241,20 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
     </p>
 </div>
 
+<!-- قسم إدارة الصلاحيات (يظهر للمدراء فقط) -->
+<div id="admin-management-section" class="timer-control-group" style="display:none; border: 2px solid var(--primary-color); padding: 15px; border-radius: 12px; background: rgba(212, 175, 55, 0.05); margin-top: 20px;">
+    <h4 style="color: var(--primary-color); margin-bottom: 12px;">👑 لوحة التحكم بالإدارة</h4>
+    
+    <div style="display: flex; gap: 8px; margin-bottom: 15px;">
+        <input type="text" id="new-admin-name" class="decoy-input" style="margin:0; flex:1;" placeholder="اسم الزميل للترقية...">
+        <button onclick="addNewAdmin()" style="background: var(--primary-color); color: #000; border: none; padding: 0 15px; border-radius: 8px; font-weight: bold; cursor: pointer;">ترقية</button>
+    </div>
+
+    <div id="admins-list-display" style="background: #000; border-radius: 8px; max-height: 120px; overflow-y: auto; font-size: 0.8rem; padding: 5px;">
+        <!-- قائمة المدراء تظهر هنا -->
+    </div>
+</div>
+
 
 <div style="border-top: 1px solid #333; margin-top: 15px; padding-top: 15px;">
     <button class="btn-login" style="background: #4b4b4b; color: #fff;" onclick="openVisitorLog()">🕒 عرض سجل دخول الزوار</button>
@@ -1474,6 +1575,7 @@ async function setUsername() {
         setupPresenceAndTyping();
         setupMomentsNotifications();
         loadMoments(); // تشغيل جلب المنشورات
+        checkAdminStatus(); 
         checkUnreadOnLogin();
         setupStaffNotifications();
 
@@ -2540,7 +2642,38 @@ function toggleInactivityInputState() {
 
 function checkSettingsAccess() { if (prompt("رمز المشرف:") === appSettings.adminCode) openSettings(); }
 
-function openSettings() { document.getElementById('settings-modal').style.display = 'flex'; populateSettingsUI(); }
+// تحديث دالة عرض الإعدادات لتشمل فحص الإدارة
+function openSettings() { 
+    document.getElementById('settings-modal').style.display = 'flex'; 
+    populateSettingsUI();
+    // فحص الإدارة عند فتح الإعدادات للتأكد من ظهور اللوحة
+    checkAdminStatus(); 
+}
+
+// دالة الحذف الفردي للمدراء (تأكد من وجودها)
+async function executeAdminDelete(id, category) {
+    if (!confirm("⚠️ إجراء إداري: هل أنت متأكد من الحذف النهائي؟")) return;
+    
+    let table = '';
+    if (category === 'msg') table = 'messages';
+    if (category === 'private_msg') table = 'private_messages';
+    if (category === 'moment') table = 'staff_moments';
+    if (category === 'visitor') table = 'visitor_logs';
+
+    const { error } = await supabaseClient.from(table).delete().eq('id', id);
+    if (!error) {
+        alert("✅ تم الحذف بنجاح");
+        if (category === 'moment') loadMoments();
+        if (category === 'visitor') renderVisitorsList();
+        if (category === 'msg' || category === 'private_msg') {
+            const el = document.getElementById((category === 'private_msg' ? 'msg-private-' : 'msg-') + id);
+            if(el) el.remove();
+        }
+    } else {
+        alert("خطأ في الحذف: " + error.message);
+    }
+}
+
 
 function populateSettingsUI() {
 
@@ -2767,39 +2900,123 @@ function toggleFriendsList() {
     }
 }
 
-function renderStaffOnlineList() {
-    const listCont = document.getElementById('staff-online-list');
-    listCont.innerHTML = '';
-    // جلب المستخدمين من الـ presenceChannel
-    const state = presenceChannel.presenceState();
-    const users = [];
-    for (const id in state) {
-        const u = state[id][0].user;
-        if(!users.includes(u) && u !== username) users.push(u);
+// دالة فتح/إغلاق القائمة الجانبية
+function toggleVisitorsSidebar() {
+    const sidebar = document.getElementById('visitors-sidebar');
+    sidebar.classList.toggle('open');
+    if (sidebar.classList.contains('open')) {
+        renderVisitorsList();
     }
+}
 
-    if (users.length === 0) {
-        listCont.innerHTML = '<p style="text-align:center; color:#666;">لا يوجد زملاء متصلين حالياً</p>';
+async function renderVisitorsList() {
+    const container = document.getElementById('visitors-list-content');
+    container.innerHTML = '<p style="text-align:center; color:#666; padding:20px;">جاري تحديث البيانات...</p>';
+
+    // 1. جلب بيانات الزوار من قاعدة البيانات
+    const { data: visitors, error } = await supabaseClient
+        .from('visitor_logs')
+        .select('*')
+        .order('entry_time', { ascending: false });
+
+    if (error) {
+        container.innerHTML = '<p style="color:red;">خطأ في تحميل البيانات</p>';
         return;
     }
 
-    users.forEach(u => {
-        const div = document.createElement('div');
-        div.style = "display:flex; align-items:center; justify-content:space-between; padding:10px; border-bottom:1px solid #333; cursor:pointer;";
-        div.innerHTML = `
-            <div style="display:flex; align-items:center; gap:10px;">
-                <div class="online-dot"></div>
-                <span style="color:#fff;">${u}</span>
+    // 2. جلب حالة الأونلاين الحالية (Presence)
+    const onlineUsers = presenceChannel.presenceState();
+    const onlineNames = [];
+    for (const id in onlineUsers) {
+        onlineNames.push(onlineUsers[id][0].user);
+    }
+
+    // 3. جلب الستوريات النشطة لمعرفة من لديه حالة
+    const nowISO = new Date().toISOString();
+    const { data: activeStories } = await supabaseClient
+        .from('staff_stories')
+        .select('username, id')
+        .gt('expires_at', nowISO);
+    
+    const usersWithStories = [...new Set((activeStories || []).map(s => s.username))];
+    const seenStoriesIds = JSON.parse(localStorage.getItem('seen_stories_' + username) || "[]");
+
+    // 4. التحقق من صلاحية الإدارة للمستخدم الحالي (إضافة المطلوب)
+    const isAdmin = typeof currentAdmins !== 'undefined' && currentAdmins.includes(username);
+
+    container.innerHTML = ''; // مسح التحميل
+
+    visitors.forEach(v => {
+        const isOnline = onlineNames.includes(v.username);
+        const hasStory = usersWithStories.includes(v.username);
+        const userAllStories = (activeStories || []).filter(s => s.username === v.username);
+        const allSeen = userAllStories.length > 0 && userAllStories.every(s => seenStoriesIds.includes(s.id));
+
+        // معالجة الأوقات
+        const entryDate = new Date(v.entry_time);
+        const myTime = entryDate.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+        const visitorTime = entryDate.toLocaleTimeString('ar-EG', { 
+            hour: '2-digit', 
+            minute: '2-digit', 
+            timeZone: v.timezone || 'UTC' 
+        });
+
+        // تحديد كلاسات الإطارات (الأولوية للستوري ثم الأونلاين)
+        let borderClass = "";
+        if (hasStory) {
+            borderClass = allSeen ? "status-story-seen" : "status-story-active";
+        } else if (isOnline) {
+            borderClass = "status-online-pulse";
+        }
+
+        const item = document.createElement('div');
+        item.className = 'visitor-item';
+        item.innerHTML = `
+            <div style="position: relative; flex-shrink: 0;">
+                <img src="${v.photo_url || 'https://ui-avatars.com/api/?name='+v.username}" 
+                     class="${borderClass}"
+                     style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; display: block; border: 2px solid #222;">
+                ${isOnline ? '<div style="position:absolute; bottom:0; right:0; width:12px; height:12px; background:#00c851; border:2px solid #111; border-radius:50%;"></div>' : ''}
             </div>
-            <button style="background:var(--primary-color); border:none; border-radius:50%; width:30px; height:30px;">💬</button>
+            <div style="flex: 1;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <b style="color: ${isOnline ? '#00c851' : '#eee'}; font-size: 0.9rem;">${v.username} ${v.username === username ? '(أنت)' : ''}</b>
+                    
+                    <!-- زر الحذف (✕) للأدمن فقط على الطرف الأيسر -->
+                    ${isAdmin ? `
+                        <button onclick="event.stopPropagation(); executeAdminDelete('${v.id}', 'visitor')" 
+                                style="background:none; border:none; color:#ff4444; font-size:1.1rem; cursor:pointer; padding:0 5px; line-height:1; transition:0.2s;" 
+                                title="حذف الزائر">✕</button>
+                    ` : ''}
+                </div>
+                <div style="font-size: 0.7rem; color: #777; margin-top: 4px;">
+                    🌍 ${v.timezone || 'غير معروف'}
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 5px; font-size: 0.65rem;">
+                    <span style="color: #aaa;">🕒 وقتك: ${myTime}</span>
+                    <span style="color: var(--primary-color);">🕒 وقته: ${visitorTime}</span>
+                </div>
+            </div>
         `;
-        div.onclick = () => {
-            alert("سيتم فتح شات خاص مع " + u + " في التحديث القادم");
-            toggleFriendsList();
-        };
-        listCont.appendChild(div);
+
+        // تفعيل النقر لمشاهدة الستوري إذا وجدت (مع منع التداخل عند الضغط على الحذف)
+        if (hasStory) {
+            item.style.cursor = "pointer";
+            item.onclick = async () => {
+                const { data: userStories } = await supabaseClient
+                    .from('staff_stories')
+                    .select('*')
+                    .eq('username', v.username)
+                    .gt('expires_at', nowISO);
+                if (userStories) openStoryViewer(userStories);
+            };
+        }
+
+        container.appendChild(item);
     });
 }
+
+
 
 
 
@@ -4319,86 +4536,80 @@ async function refreshStoriesUI() {
     if (!supabaseClient) return;
     const now = new Date().toISOString();
     
-    // 1. جلب الحالات النشطة من السيرفر
+    // 1. جلب الحالات النشطة
     const { data: activeStories } = await supabaseClient
         .from('staff_stories')
-        .select('username, media_url, media_type, content, id')
+        .select('username, id')
         .gt('expires_at', now);
 
     if (!activeStories) return;
 
-    // 2. جلب قائمة المعرفات (ID) للحالات التي شاهدها المستخدم
     const seenStories = JSON.parse(localStorage.getItem('seen_stories_' + username) || "[]");
-
     const storiesByUser = {};
     activeStories.forEach(s => {
         if (!storiesByUser[s.username]) storiesByUser[s.username] = [];
         storiesByUser[s.username].push(s);
     });
 
-    // 3. مسح جميع الصور لتطبيق التنسيق الذكي
-    document.querySelectorAll('img').forEach(img => {
-        let ownerName = "";
-        let isLargePostMedia = false; // متغير لتحديد هل هذه صورة منشور كبيرة؟
+    // 2. استهداف حصري فقط لصور الأفاتار (تجنب صور المنشورات والرسائل)
+    // سنبحث فقط عن الصور الموجودة داخل حاويات الأفاتار المعروفة
+    const avatarSelectors = [
+        '.moment-card img[style*="width: 38px"]', // صورة كاتب المنشور
+        '.message img[style*="width: 100%"]:not([src*="giphy"])', // هذا يحتاج دقة: سنستخدم كلاس أفضل
+        '.user-avatar-img', // الكلاس الذي اضفناه في الخطوة 1
+        '#staff-online-bubbles img', // فقاعات المتصلين
+        '.visitor-item img' // صور سجل الزوار
+    ];
+
+    document.querySelectorAll(avatarSelectors.join(',')).forEach(img => {
         
-        // البحث عن اسم صاحب الصورة في المنشورات
-        const momentCard = img.closest('.moment-card');
-        if (momentCard) {
-            const nameEl = momentCard.querySelector('b');
-            if (nameEl) ownerName = nameEl.innerText.trim();
-            
-            // تمييز: إذا كانت الصورة داخل "moment-media-frame" فهي صورة منشور وليست أفاتار
-            if (img.closest('.moment-media-frame') || img.style.width === "100%") {
-                isLargePostMedia = true;
-            }
-        }
-        
-        // البحث عن اسم المرسل في الرسائل
-        const messageDiv = img.closest('.message');
-        if (messageDiv) {
-            const senderEl = messageDiv.querySelector('.message-sender');
-            if (senderEl) ownerName = senderEl.innerText.trim();
+        // قفل أمان إضافي: إذا كانت الصورة كبيرة (صورة منشور) اتركها فوراً
+        if (img.offsetWidth > 60 || img.closest('.moment-media-frame')) {
+            img.classList.remove('avatar-has-story', 'avatar-seen-story');
+            return; 
         }
 
-        // إذا كان لهذا المستخدم حالات نشطة
+        let ownerName = "";
+        
+        // تحديد اسم صاحب الأفاتار
+        const momentName = img.closest('.moment-card')?.querySelector('b')?.innerText.trim();
+        const msgName = img.closest('.message')?.querySelector('.message-sender')?.innerText.trim();
+        const bubbleName = img.closest('div[style*="min-width: 70px"]')?.querySelector('span')?.innerText.trim();
+        const visitorName = img.closest('.visitor-item')?.querySelector('b')?.innerText.trim();
+
+        ownerName = momentName || msgName || bubbleName || visitorName;
+
         if (ownerName && storiesByUser[ownerName]) {
             const userStories = storiesByUser[ownerName];
             img.classList.add('avatar-has-story');
             img.style.cursor = "pointer";
 
-            // --- التعديل الجوهري لشكل الإطار ---
-            if (isLargePostMedia) {
-                img.style.borderRadius = "8px"; // حواف مستطيلة للصورة الكبيرة
-            } else {
-                img.style.borderRadius = "50%"; // حواف دائرية للأفاتار الشخصي
-            }
-
             const allSeen = userStories.every(s => seenStories.includes(s.id));
-            
             if (allSeen) {
                 img.classList.add('avatar-seen-story');
             } else {
                 img.classList.remove('avatar-seen-story');
             }
 
-            img.onclick = (e) => {
+            img.onclick = async (e) => {
                 e.stopPropagation();
-                userStories.forEach(s => {
-                    if (!seenStories.includes(s.id)) seenStories.push(s.id);
-                });
-                localStorage.setItem('seen_stories_' + username, JSON.stringify(seenStories));
-                
-                openStoryViewer(userStories);
-                refreshStoriesUI();
+                // جلب الداتا الكاملة عند النقر فقط لتقليل الحمل
+                const { data: fullStories } = await supabaseClient
+                    .from('staff_stories')
+                    .select('*')
+                    .eq('username', ownerName)
+                    .gt('expires_at', now);
+                if (fullStories) openStoryViewer(fullStories);
             };
         } else {
             img.classList.remove('avatar-has-story', 'avatar-seen-story');
-            // إعادة الصور الشخصية لأصلها الدائري إذا لم يكن هناك ستوري
-            if (!isLargePostMedia) img.style.borderRadius = "50%";
         }
     });
 }
 
+
+// تشغيل التحديث كل 5 ثوانٍ لضمان دقة الحالات
+setInterval(refreshStoriesUI, 5000);
 
 // تشغيل التحديث كل 5 ثوانٍ لضمان دقة الحالات
 setInterval(refreshStoriesUI, 5000);
@@ -4533,6 +4744,117 @@ function markCommentAsRead(uniqueId, momentId, elementId) {
     goToMoment(momentId);
 }
 
+// ==========================================
+// نظام الإدارة المتقدم (صلاحيات الأدمن)
+// ==========================================
+
+let currentAdmins = []; // قائمة بأسماء المدراء من قاعدة البيانات
+
+// 1. التحقق هل المستخدم الحالي أدمن؟
+async function checkAdminStatus() {
+    if (!supabaseClient) return false;
+    const { data } = await supabaseClient.from('admin_list').select('admin_name');
+    if (data) {
+        currentAdmins = data.map(a => a.admin_name);
+        // إذا كان المستخدم أدمن، أظهر له قسم الإدارة في الإعدادات
+        if (currentAdmins.includes(username)) {
+            const section = document.getElementById('admin-management-section');
+            if(section) section.style.display = 'block';
+            updateAdminsUI();
+        }
+    }
+    return currentAdmins.includes(username);
+}
+
+// 2. إضافة أدمن جديد (تخزين أبدي في SQL)
+async function addNewAdmin() {
+    const name = document.getElementById('new-admin-name').value.trim();
+    if (!name) return;
+    if (confirm(`هل أنت متأكد من منح ${name} صلاحيات الإدارة الكاملة؟`)) {
+        await supabaseClient.from('admin_list').upsert([{ admin_name: name }]);
+        alert(`تمت ترقية ${name} بنجاح.`);
+        document.getElementById('new-admin-name').value = '';
+        checkAdminStatus();
+    }
+}
+
+// 3. تحديث واجهة قائمة المدراء
+function updateAdminsUI() {
+    const list = document.getElementById('admins-list-display');
+    if (!list) return;
+    list.innerHTML = currentAdmins.map(admin => `
+        <div style="display:flex; justify-content:space-between; padding:5px; border-bottom:1px solid #222;">
+            <span>🛡️ ${admin}</span>
+            ${admin !== 'ahmadalshaear' ? `<span onclick="removeAdminRole('${admin}')" style="color:red; cursor:pointer;">سحب الرتبة</span>` : ''}
+        </div>
+    `).join('');
+}
+
+async function removeAdminRole(name) {
+    if (confirm(`سحب الصلاحيات من ${name}؟`)) {
+        await supabaseClient.from('admin_list').delete().eq('admin_name', name);
+        checkAdminStatus();
+    }
+}
+
+// ==========================================
+// أدوات الحذف الفردي (للأدمن والمالك)
+// ==========================================
+
+// تعديل دالة بناء الرسالة لإضافة علامة X للأدمن
+function getAdminControls(msgId, senderName, type) {
+    const isAdmin = currentAdmins.includes(username);
+    const isOwner = (username === senderName);
+    
+    if (isAdmin || isOwner) {
+        return `
+            <div style="position:absolute; left:5px; top:5px; display:flex; gap:5px; z-index:100;">
+                <button onclick="executeAdminDelete('${msgId}', '${type}')" style="background:rgba(255,0,0,0.6); border:none; color:white; border-radius:50%; width:20px; height:20px; cursor:pointer; font-size:10px;">✕</button>
+                ${isOwner || isAdmin ? `<button onclick="executeAdminEdit('${msgId}', '${type}')" style="background:rgba(0,200,81,0.6); border:none; color:white; border-radius:50%; width:20px; height:20px; cursor:pointer; font-size:10px;">✎</button>` : ''}
+            </div>
+        `;
+    }
+    return '';
+}
+
+// تنفيذ الحذف الفعلي
+async function executeAdminDelete(id, category) {
+    if (!confirm("حذف نهائي لهذا العنصر؟")) return;
+    
+    let table = '';
+    if (category === 'msg') table = 'messages';
+    if (category === 'private_msg') table = 'private_messages';
+    if (category === 'moment') table = 'staff_moments';
+    if (category === 'visitor') table = 'visitor_logs';
+
+    const { error } = await supabaseClient.from(table).delete().eq('id', id);
+    if (!error) {
+        alert("تم الحذف بنجاح");
+        // تحديث الواجهة
+        if (category === 'moment') loadMoments();
+        if (category === 'visitor') renderVisitorsList();
+    }
+}
+
+// تعديل دالة appendMessageToUI الأصلية لدمج الأزرار
+// داخل الدالة appendMessageToUI، قبل نهاية تعريف bubbleStyle، أضف:
+// const adminTools = getAdminControls(msgId, sender, isPrivate ? 'private_msg' : 'msg');
+// bubble.innerHTML += adminTools;
+
+// تفعيل ميزة حذف التعليقات بشكل منفرد للأدمن
+async function deleteCommentAdmin(momentId, commentIndex) {
+    if (!currentAdmins.includes(username)) return;
+    if (!confirm("حذف هذا التعليق بصفتك مديراً؟")) return;
+
+    const { data } = await supabaseClient.from('staff_moments').select('comments').eq('id', momentId).single();
+    let comments = data.comments;
+    comments.splice(commentIndex, 1);
+
+    await supabaseClient.from('staff_moments').update({ comments: comments }).eq('id', momentId);
+    loadMoments();
+}
+
+
 </script>
 
 <div id="staff-moments-interface" class="modal-overlay" style="display: none; flex-direction: column; padding: 0; background: #000;">
@@ -4544,7 +4866,20 @@ function markCommentAsRead(uniqueId, momentId, elementId) {
         💬 <div id="msg-badge" style="display:none; position:absolute; top:-5px; right:5px; background:red; color:white; border-radius:50%; width:18px; height:18px; font-size:10px; display:flex; align-items:center; justify-content:center; border:2px solid #1a1a1a;">0</div>
     </button>
 
-    <button class="staff-nav-btn" onclick="toggleFriendsList()" style="font-size: 1.4rem; background: none; border: none; color: #fff; cursor: pointer;">👥</button>
+<!-- تغيير الزر في شريط التنقل -->
+<button class="staff-nav-btn" onclick="toggleVisitorsSidebar()" style="font-size: 1.4rem; background: none; border: none; color: #fff; cursor: pointer;">👥</button>
+
+<!-- هيكل القائمة الجانبية الجديد -->
+<div id="visitors-sidebar" class="visitors-sidebar">
+    <div class="visitors-header">
+        <h3 style="color: var(--primary-color); font-size: 1.1rem;">سجل الزوار والزملاء</h3>
+        <button onclick="toggleVisitorsSidebar()" style="background:none; border:none; color:#ff4444; font-size:1.5rem; cursor:pointer;">✕</button>
+    </div>
+    <div id="visitors-list-content">
+        <!-- سيتم تعبئته برمجياً -->
+    </div>
+</div>
+
 
     <!-- زر الجرس (🔔) المحدث -->
     <button class="staff-nav-btn pulse-active" id="bell-btn-main" onclick="handleNotificationClick(); stopPulse(this)" style="position: relative; font-size: 1.4rem; background: none; border: none; color: #fff; cursor: pointer;">
