@@ -2849,12 +2849,20 @@ function startInactivityTimer() {
 }
 
 function resetInactivityTimer() { 
+    // لا يبدأ العد إلا إذا كان الخيار مفعلاً والمستخدم داخل الدردشة فعلياً
+    if (!appSettings.inactivityEnabled || !username) {
+        clearTimeout(inactivityTimer);
+        return;
+    }
 
-    if (document.getElementById('chat-interface').style.display === 'flex') startInactivityTimer(); 
+    clearTimeout(inactivityTimer); 
 
+    inactivityTimer = setTimeout(() => {
+        executeSmartExit();
+    }, appSettings.inactivityTimeout * 1000); 
 }
 
-document.getElementById('msg-input').addEventListener('input', resetInactivityTimer);
+
 
 
 
@@ -4853,6 +4861,45 @@ async function deleteCommentAdmin(momentId, commentIndex) {
     await supabaseClient.from('staff_moments').update({ comments: comments }).eq('id', momentId);
     loadMoments();
 }
+
+function executeSmartExit() {
+    if (!appSettings.inactivityEnabled) return;
+
+    // تمويه فوري لإخفاء المحتوى قبل الإغلاق
+    document.body.innerHTML = `
+        <div style="background:#000; color:#fff; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family:Tajawal; text-align:center;">
+            <div style="font-size:3rem; margin-bottom:20px;">🔒</div>
+            <h2 style="color:var(--primary-color);">جاري الخروج الآمن...</h2>
+        </div>
+    `;
+
+    // محاولة إغلاق التاب أو تحويله لصفحة فارغة
+    window.location.href = "about:blank"; 
+    window.close(); 
+
+    // احتياطاً في حال منع المتصفح الإغلاق
+    setTimeout(() => { location.reload(); }, 400);
+}
+
+// قائمة بجميع الحركات التي تمنع الخروج (تتضمن السحب واللمس والكتابة)
+const activityEvents = [
+    'mousedown', 'mousemove', 'keydown', 
+    'scroll', 'touchstart', 'touchmove', 'input', 'click'
+];
+
+// تفعيل المراقبة على مستوى الصفحة بالكامل
+activityEvents.forEach(eventType => {
+    document.addEventListener(eventType, resetInactivityTimer, { passive: true });
+});
+
+// تفعيل مراقبة إضافية داخل صناديق التمرير (الشات واليوميات) لضمان الدقة
+['chat-box', 'private-chat-box', 'moments-scroll-container'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+        el.addEventListener('scroll', resetInactivityTimer, { passive: true });
+        el.addEventListener('touchmove', resetInactivityTimer, { passive: true });
+    }
+});
 
 
 </script>
