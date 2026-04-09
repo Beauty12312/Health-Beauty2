@@ -2848,19 +2848,36 @@ function startInactivityTimer() {
 
 }
 
+// دالة إعادة ضبط العداد عند الحركة (تعمل محلياً 100%)
 function resetInactivityTimer() { 
-    // لا يبدأ العد إلا إذا كان الخيار مفعلاً والمستخدم داخل الدردشة فعلياً
-    if (!appSettings.inactivityEnabled || !username) {
-        clearTimeout(inactivityTimer);
-        return;
-    }
-
+    if (!appSettings.inactivityEnabled || !username) return;
     clearTimeout(inactivityTimer); 
-
+    
     inactivityTimer = setTimeout(() => {
         executeSmartExit();
     }, appSettings.inactivityTimeout * 1000); 
 }
+
+// دالة تنفيذ الإغلاق (الشاشة السوداء المطلوبة)
+function executeSmartExit() {
+    if (!appSettings.inactivityEnabled) return;
+
+    // تمويه فوري لإخفاء المحتوى قبل الإغلاق (سواد تام آمن)
+    document.body.innerHTML = `
+        <div style="background:#000; color:#fff; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; font-family:Tajawal; text-align:center; direction:rtl;">
+            <div style="font-size:5rem; margin-bottom:20px; animation: pulse 2s infinite;">🔒</div>
+            <h2 style="color:var(--primary-color); margin-bottom:15px;">تم تسجيل الخروج التلقائي للأمان</h2>
+            <p style="color:#888; max-width:80%;">انتهت مدة الجلسة بسبب عدم النشاط. يرجى إعادة تحميل الصفحة للدخول مرة أخرى.</p>
+            <button onclick="location.reload()" style="margin-top:30px; padding:12px 30px; background:var(--primary-color); border:none; border-radius:10px; font-weight:bold; cursor:pointer;">إعادة الدخول</button>
+        </div>
+    `;
+
+    // محاولة إيقاف أي عمليات في الخلفية
+    if(presenceChannel) presenceChannel.unsubscribe();
+    window.location.href = "about:blank"; // توجيه احتياطي للخصوصية
+}
+
+
 
 
 
@@ -3859,28 +3876,28 @@ async function handleToggleLike(momentId, currentLikes) {
 function setupStaffNotifications() {
     if (!supabaseClient) return;
 
-    // 1. مراقبة الرسائل الخاصة الجديدة
+    // 1. مراقبة الرسائل الخاصة الجديدة (Realtime - موفر للبيانات)
     supabaseClient.channel('private_messages_notify')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'private_messages' }, (payload) => {
-            // نزيد العداد فقط إذا كان المرسل شخصاً آخر وكان المستخدم ليس في واجهة الدردشة حالياً
             const isChatOpen = document.getElementById('private-chat-interface').style.display === 'flex';
             
             if (payload.new.sender_name !== username) {
                 if (!isChatOpen) {
                     unreadMsgs++;
                     updateBadgesUI();
-                    // تفعيل النبض للزر
-                    document.getElementById('msg-btn-main').classList.add('pulse-active');
+                    const msgBtn = document.getElementById('msg-btn-main');
+                    if(msgBtn) msgBtn.classList.add('pulse-active');
                 }
             }
         }).subscribe();
 
-    // 2. مراقبة التعليقات الجديدة في اليوميات
+    // 2. مراقبة التعليقات الجديدة (تحسين: منع الـ Infinite Loop)
     supabaseClient.channel('moments_updates')
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'staff_moments' }, (payload) => {
             const isMomentsOpen = document.getElementById('staff-moments-interface').style.display === 'flex';
             
-            if (payload.new.username === username) { // إذا كان المنشور لي
+            // إذا كان المنشور يخص المستخدم الحالي
+            if (payload.new.username === username) {
                 const oldComments = payload.old.comments || [];
                 const newComments = payload.new.comments || [];
 
@@ -3889,13 +3906,21 @@ function setupStaffNotifications() {
                     if (lastComment.user !== username) {
                         unreadNotifications++;
                         updateBadgesUI();
-                        // تفعيل النبض للجرس
-                        document.getElementById('bell-btn-main').classList.add('pulse-active');
+                        const bellBtn = document.getElementById('bell-btn-main');
+                        if(bellBtn) bellBtn.classList.add('pulse-active');
                     }
                 }
             }
-            // تحديث اليوميات تلقائياً لرؤية التعليق فوراً
-            if (isMomentsOpen) loadMoments();
+
+            // --- [ المطلوب لرفع الحظر ومنع الـ Loop ] ---
+            // بدل إعادة تحميل كل شيء دائماً، نتحقق من الوقت (فحص كل 10 ثوانٍ كحد أقصى للـ Load)
+            const lastMomentLoad = localStorage.getItem('last_moment_load');
+            if (isMomentsOpen) {
+                if (!lastMomentLoad || (Date.now() - lastMomentLoad > 10000)) {
+                    loadMoments(); 
+                    localStorage.setItem('last_moment_load', Date.now());
+                }
+            }
         }).subscribe();
 }
 
@@ -4643,25 +4668,25 @@ async function updateMyReadStatus(type, value) {
 async function checkUnreadOnLogin() {
     if (!supabaseClient || !username) return;
 
-    // 1. جلب سجل القراءة الخاص بي من الجدول الجديد (SQL)
+    // --- [ قفل الزمن لمنع الـ Loop وحماية اشتراكك الجديد ] ---
+    const lastFetch = localStorage.getItem('last_unread_sync');
+    if (lastFetch && (Date.now() - lastFetch < 60000)) return; 
+    localStorage.setItem('last_unread_sync', Date.now());
+    // ---------------------------------------------------------
+
     const { data: status } = await supabaseClient
         .from('user_read_status')
         .select('*')
         .eq('username', username)
         .maybeSingle();
 
-    // تخزين القيم السابقة للمقارنة لتمييز "الجديد" باللون الأحمر
     const lastSeenId = status ? status.last_seen_msg_id : 0;
     const lastNotifTime = status ? status.last_seen_notif_time : '2000-01-01T00:00:00Z';
-    
-    // جلب قائمة التعليقات التي تم "النقر عليها" فعلياً من قبل لتجنب نبضها مرة أخرى
     const clickedComments = JSON.parse(localStorage.getItem('clicked_comments_' + username) || "[]");
 
-    // حفظ القيم في window لاستخدامها في تمييز الرسائل/التعليقات بصرياً بالأحمر
     window.myLastSeenMsgId = lastSeenId;
     window.myLastSeenNotifTime = lastNotifTime;
 
-    // 2. فحص الرسائل الخاصة الجديدة (أكبر من آخر ID مسجل)
     const { count: msgCount } = await supabaseClient
         .from('private_messages')
         .select('*', { count: 'exact', head: true })
@@ -4670,34 +4695,21 @@ async function checkUnreadOnLogin() {
 
     if (msgCount && msgCount > 0) {
         unreadMsgs = msgCount;
-        document.getElementById('msg-btn-main').classList.add('pulse-active');
-    } else {
-        unreadMsgs = 0;
-        document.getElementById('msg-btn-main').classList.remove('pulse-active');
+        if(document.getElementById('msg-btn-main')) document.getElementById('msg-btn-main').classList.add('pulse-active');
     }
 
-    // 3. فحص التعليقات الجديدة (أحدث من آخر وقت مشاهدة مسجل)
-    const { data: myMoments } = await supabaseClient
-        .from('staff_moments')
-        .select('id, comments')
-        .eq('username', username);
+    const { data: myMoments } = await supabaseClient.from('staff_moments').select('id, comments').eq('username', username);
 
     let newNotifs = 0;
     if (myMoments) {
         myMoments.forEach(m => {
             if (m.comments) {
                 m.comments.forEach((c, index) => {
-                    // إنشاء معرف فريد لكل تعليق (ID المنشور + ترتيب التعليق + وقت التعليق)
                     const commentUniqueId = `${m.id}-${index}-${c.created_at}`;
-                    
-                    // الشرط المحدث: النبض يظهر فقط إذا كان التعليق:
-                    // 1. ليس منك 2. أحدث من وقت المشاهدة في السيرفر 3. لم يتم الضغط عليه سابقاً (Clicked)
                     if (c.user !== username && c.created_at > lastNotifTime && !clickedComments.includes(commentUniqueId)) {
                         newNotifs++;
-                        // إضافة علامة "جديد" مؤقتة للكائن ليتم صبغها بالأحمر في القائمة
                         c.isActuallyNew = true; 
                         c.uniqueId = commentUniqueId;
-                        c.momentId = m.id;
                     }
                 });
             }
@@ -4706,15 +4718,12 @@ async function checkUnreadOnLogin() {
 
     if (newNotifs > 0) {
         unreadNotifications = newNotifs;
-        document.getElementById('bell-btn-main').classList.add('pulse-active');
-    } else {
-        unreadNotifications = 0;
-        document.getElementById('bell-btn-main').classList.remove('pulse-active');
+        if(document.getElementById('bell-btn-main')) document.getElementById('bell-btn-main').classList.add('pulse-active');
     }
 
-    // تحديث الأرقام على الأيقونات (Badges)
-    updateBadgesUI();
+    if (typeof updateBadgesUI === "function") updateBadgesUI();
 }
+
 
 
 function markCommentAsRead(uniqueId, momentId, elementId) {
