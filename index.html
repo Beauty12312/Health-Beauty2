@@ -10,6 +10,15 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><style>
 
+.moment-card iframe {
+    width: 100% !important;
+    aspect-ratio: 16 / 9;
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+}
+
+
 /* منع الإطارات عن صور المنشورات والرسائل الكبيرة بشكل نهائي */
 .moment-media-frame img, 
 .message img:not(.user-avatar-img), 
@@ -3441,6 +3450,7 @@ async function submitMoment() {
     }
 }
 
+
 async function loadMoments() {
     const feed = document.getElementById('moments-feed');
     if (!feed) return;
@@ -3454,13 +3464,28 @@ async function loadMoments() {
 
     feed.innerHTML = '';
 
+    // دالة داخلية لتحويل روابط يوتيوب داخل محتوى المنشور
+    const formatContent = (text) => {
+        if (!text) return "";
+        const youtubePattern = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^& \n<]+)/g;
+        return text.replace(youtubePattern, function(url, videoId) {
+            return `
+                <div style="margin: 10px 0; border-radius: 12px; overflow: hidden; background: #000; line-height: 0; box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
+                    <iframe width="100%" height="250" src="https://www.youtube.com/embed/${videoId}" 
+                        frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen>
+                    </iframe>
+                </div>`;
+        });
+    };
+
     moments.forEach(m => {
         const isMine = m.username === username;
         const likesArray = Array.isArray(m.likes) ? m.likes : [];
         const hasLiked = likesArray.includes(username);
-        
-        // --- ميزة معرفة من وضع لايك ---
         const likesNames = likesArray.length > 0 ? likesArray.join('، ') : "لا يوجد معجبين بعد";
+
+        // فحص وجود يوتيوب لإخفاء الميديا العادية (اختياري لجمالية العرض)
+        const hasYoutube = m.content && m.content.match(/(?:youtube\.com|youtu\.be)/);
 
         let headerActionsHtml = '';
         if (isMine) {
@@ -3473,7 +3498,8 @@ async function loadMoments() {
         }
 
         let mediaHtml = '';
-        if (m.media_url) {
+        // نعرض الميديا المرفوعة فقط إذا لم يكن هناك فيديو يوتيوب في النص (لتجنب زحمة المنشور)
+        if (m.media_url && !hasYoutube) {
             const isVideo = m.media_type === 'video' || m.media_url.includes('.mp4');
             mediaHtml = `
                 <div style="position: relative; background: #000; overflow: hidden; border-top: 1px solid #222; border-bottom: 1px solid #222;">
@@ -3522,7 +3548,6 @@ async function loadMoments() {
             </div>
         </div>`;
 
-        // تحويل المصفوفة إلى نص آمن للاستخدام داخل خاصية onclick
         const safeLikes = JSON.stringify(likesArray).replace(/"/g, '&quot;');
 
         const card = `
@@ -3538,7 +3563,7 @@ async function loadMoments() {
                     ${headerActionsHtml}
                 </div>
 
-                ${m.content ? `<p style="padding: 0 15px 12px; margin: 0; color: #eee; font-size: 0.9rem; line-height: 1.5;">${m.content}</p>` : ''}
+                ${m.content ? `<div style="padding: 0 15px 12px; margin: 0; color: #eee; font-size: 0.9rem; line-height: 1.5;">${formatContent(m.content)}</div>` : ''}
                 
                 ${mediaHtml}
 
@@ -3547,13 +3572,10 @@ async function loadMoments() {
                          style="cursor: pointer; display: flex; align-items: center; gap: 6px; position: relative;" 
                          onclick="handleToggleLike(${m.id}, ${safeLikes})"
                          title="المعجبون: ${likesNames}">
-                        
                         <span style="font-size: 1.2rem;">${hasLiked ? '❤️' : '🤍'}</span>
                         <small style="color: ${hasLiked ? '#ff4d4d' : '#888'}; font-weight: bold;">${likesArray.length}</small>
-                        
                         <div class="likes-tooltip">${likesNames}</div>
                     </div>
-
                     <div style="display: flex; align-items: center; gap: 6px;">
                         <span style="font-size: 1.2rem;">💬</span>
                         <small style="color: #888;">${m.comments ? m.comments.length : 0}</small>
@@ -4909,6 +4931,39 @@ activityEvents.forEach(eventType => {
         el.addEventListener('touchmove', resetInactivityTimer, { passive: true });
     }
 });
+
+// أضف هذه الدالة المساعدة في قسم السكريبت
+function formatMomentContent(text) {
+    if (!text) return "";
+    
+    // تعبير نمطي لاكتشاف روابط يوتيوب
+    const youtubePattern = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^& \n<]+)/g;
+    
+    // استبدال الرابط بإطار فيديو يوتيوب متناسق
+    let formattedText = text.replace(youtubePattern, function(url, videoId) {
+        return `
+            <div style="margin: 10px 0; border-radius: 12px; overflow: hidden; background: #000; line-height: 0;">
+                <iframe 
+                    width="100%" 
+                    height="250" 
+                    src="https://www.youtube.com/embed/${videoId}" 
+                    frameborder="0" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                    allowfullscreen>
+                </iframe>
+            </div>`;
+    });
+
+    // تحويل الروابط العادية الأخرى لروابط قابلة للنقر
+    const urlPattern = /(\b(https?|ftp|file):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig;
+    return formattedText.replace(urlPattern, function(url) {
+        if (url.includes('iframe')) return url;
+        return `<a href="${url}" target="_blank" style="color: var(--primary-color); text-decoration: none;">${url}</a>`;
+    });
+}
+
+// الآن داخل دالة loadMoments، استبدل سطر عرض المحتوى بهذا:
+// ${m.content ? `<p style="padding: 0 15px 12px; margin: 0; color: #eee; font-size: 0.9rem; line-height: 1.5;">${formatMomentContent(m.content)}</p>` : ''}
 
 
 </script>
