@@ -5104,7 +5104,7 @@ function initLiveVoiceSystem() {
         if (isLiveSpeakerOn) {
             call.answer(localStream || new MediaStream());
             handleIncomingStream(call);
-            // إرسال إشارة تحديث للشريط اللحظي لتحديث القائمة البصرية
+            // بث فوري لإشعار جهاز المرسل بوجودك في الخط ليظهر لديه البروفايل مباشرة
             broadcastVoicePresence(isLiveMicOn);
         } else {
             call.close();
@@ -5126,7 +5126,7 @@ function handleIncomingStream(call) {
         document.body.appendChild(audio);
         connectedPeers[call.peer] = call;
         
-        // تحديث واجهة صور الحسابات
+        // رندر فوري ولايف لصورة اللاعب الجديد عند بدء تدفق الصوت
         updateVoiceBarUI();
     });
 
@@ -5153,11 +5153,9 @@ async function toggleVoiceCall() {
             localStream = await navigator.mediaDevices.getUserMedia(audioConstraints);
             isLiveMicOn = true;
             
-            // تحويل الزر إلى علامة إغلاق حمراء مثل الواتساب
             btn.innerText = "❌";
             btn.className = "call-btn btn-leave";
 
-            // إخطار بقية المتصلين في السيرفر للربط المباشر مع جهازك
             if (window.roomChannel) {
                 const presenceState = roomChannel.presenceState();
                 Object.values(presenceState).forEach(presencePres => {
@@ -5171,7 +5169,7 @@ async function toggleVoiceCall() {
                 });
             }
             
-            // إرسال حالتك الصوتية الحية لجدول الـ Presence والبث اللحظي بالصورة الحقيقية
+            // تحديث حالتك وإخطار كافة الأجهزة المتصلة بالبث الصوتي فوراً بالصورة الحقيقية المختارة
             if (typeof syncUserPresence === "function") {
                 await syncUserPresence(true);
             }
@@ -5183,12 +5181,10 @@ async function toggleVoiceCall() {
             alert("🔒 Access Denied: Please verify microphone site permissions.");
         }
     } else {
-        // الخروج من المكالمة
         if (localStream) localStream.getTracks().forEach(track => track.stop());
         localStream = null;
         isLiveMicOn = false;
         
-        // إعادة زر الاتصال الأخضر (📞)
         btn.innerText = "📞";
         btn.className = "call-btn btn-join";
         
@@ -5198,13 +5194,12 @@ async function toggleVoiceCall() {
     }
 }
 
-// إرسال تحديث برودكاست عبر قنوات الـ Supabase ومزامنة صورة الحساب المختارة بدقة
+// بث تحديث لحظي قوي لجميع المتصفحات المفتوحة حالياً لإجبار الشريط على الرسم اللايف
 async function broadcastVoicePresence(inCall = false) {
     const myName = localStorage.getItem('chat_username');
     const myAvatar = localStorage.getItem('user_avatar') || 'https://www.w3schools.com/howto/img_avatar.png';
     if (!myName || !window.roomChannel) return;
     
-    // حقن الصورة المختارة مباشرة داخل تيار البث اللحظي للشبكة
     roomChannel.send({
         type: 'broadcast',
         event: 'voice_bar_sync',
@@ -5212,7 +5207,7 @@ async function broadcastVoicePresence(inCall = false) {
     });
 }
 
-// تحديث واجهة الشريط ورسم صور الحسابات الحقيقية والملونة بنسبة 100% دون تغيير الامتيازات
+// رندر واجهة صور الحسابات الحقيقية والملونة لحظة بلحظة وبشكل مباشر
 async function updateVoiceBarUI() {
     const container = document.getElementById('callMembersList');
     const placeholder = document.getElementById('callPlaceholderStatus');
@@ -5221,7 +5216,7 @@ async function updateVoiceBarUI() {
     const myName = localStorage.getItem('chat_username');
     let html = '';
 
-    // 1. إضافة صورتك الشخصية الحقيقية فوراً وبأعلى دقة إذا كنت متصلاً
+    // 1. إضافة صورتك الشخصية فوراً وبأعلى دقة إذا كنت متصلاً
     if (isLiveMicOn) {
         const myAvatar = localStorage.getItem('user_avatar') || 'https://www.w3schools.com/howto/img_avatar.png';
         html += `
@@ -5231,7 +5226,7 @@ async function updateVoiceBarUI() {
             </div>`;
     }
 
-    // 2. مطابقة بقية الإخوة المتصلين صوتياً بالخلفية وسحب صور حساباتهم الحقيقية
+    // 2. سحب ومطابقة بقية الإخوة المتصلين صوتياً بالخلفية بدقة لايف
     if (window.roomChannel) {
         const audioElements = document.querySelectorAll('audio[id^="audio-eternal-"]');
         const presenceState = roomChannel.presenceState();
@@ -5244,7 +5239,6 @@ async function updateVoiceBarUI() {
                     const checkId = 'eternal-' + btoa(unescape(encodeURIComponent(user.name || user.username))).replace(/=/g, '').substr(0, 15);
                     
                     if (peerId === checkId) {
-                        // الفحص الشامل للامتيازات: تفقد كافة الخصائص المحتملة لرابط الصورة المختارة والمخزنة في السيرفر للبروفايل الحقيقي
                         const userAvatar = user.avatar_url || user.avatar || 'https://www.w3schools.com/howto/img_avatar.png';
                         const displayName = (user.name || user.username || "Brother").split(' ')[0].toUpperCase();
 
@@ -5267,7 +5261,6 @@ async function updateVoiceBarUI() {
     }
 }
 
-// دالة التحكم بكتم صوت الغرفة بالكامل (السماعة) كما هي دون تعديل امتيازات
 function toggleLiveSpeaker() {
     const btn = document.getElementById('callSpeakerBtn');
     isLiveSpeakerOn = !isLiveSpeakerOn;
@@ -5281,11 +5274,10 @@ function toggleLiveSpeaker() {
         btn.className = "call-btn btn-speaker-off";
         document.querySelectorAll('audio[id^="audio-eternal-"]').forEach(audio => audio.muted = true);
     }
-    // تحديث فوري لواجهة الشريط لضمان دقة الرندر عند الكتم أو التشغيل
     updateVoiceBarUI();
 }
 
-// دمج المزامنة اللحظية للشريط مع ربط مستمعي قنوات الـ Presence الإضافية لضمان استلام الصور
+// دمج المزامنة اللحظية الحية الفورية للشريط مع مستمعي أحداث السيرفر (لايف 100%)
 const originalSetupRealtime = setupRealtime;
 setupRealtime = function() {
     if (typeof originalSetupRealtime === "function") originalSetupRealtime();
@@ -5294,21 +5286,19 @@ setupRealtime = function() {
         initLiveVoiceSystem();
         
         if (window.roomChannel) {
-            // الاستماع لإشارات البرودكاست المباشرة لإعادة رندر الصور
+            // الاستماع الفوري والإلزامي لبرودكاست الصوت لإعادة رندر الشريط بدون أي تأخير
             roomChannel.on('broadcast', { event: 'voice_bar_sync' }, () => {
-                setTimeout(updateVoiceBarUI, 500);
+                updateVoiceBarUI();
             });
 
-            // تحديث إضافي: إعادة رندر الشريط تلقائياً عند حدوث أي تغيير أو دخول للاعبين في الـ Presence لضمان جلب صور الحسابات فوراً
-            roomChannel.on('presence', { event: 'join' }, () => {
-                setTimeout(updateVoiceBarUI, 1000);
-            });
-            roomChannel.on('presence', { event: 'leave' }, () => {
-                setTimeout(updateVoiceBarUI, 500);
+            // تحديث فوري فائق السرعة عند حدوث join أو leave للـ Presence العام لضمان مزامنة خروج ودخول اللاعبين مباشرة
+            roomChannel.on('presence', { event: 'sync' }, () => {
+                updateVoiceBarUI();
             });
         }
     }, 2500);
 };
+
 
 
 </script>
@@ -5457,4 +5447,4 @@ setupRealtime = function() {
 
 
 </body>
-</html>
+    </html>
