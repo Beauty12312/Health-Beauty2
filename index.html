@@ -5097,29 +5097,66 @@ async function toggleLiveMic() {
     }
 }
 
-// دالة كتم وتشغيل أصوات اللاعبين الآخرين (السماعة بجانب المايك)
-function toggleLiveSpeaker() {
-    const btn = document.getElementById('liveSpeakerBtn');
-    isLiveSpeakerOn = !isLiveSpeakerOn;
-    
-    btn.innerText = isLiveSpeakerOn ? "🔊 On" : "🔇 Muted";
-    btn.style.background = isLiveSpeakerOn ? "#4CAF50" : "#757575";
-    
-    // كتم أو تشغيل كافة العناصر الصوتية النشطة في الصفحة
-    document.querySelectorAll('audio[id^="audio-eternal-"]').forEach(audio => {
-        audio.muted = !isLiveSpeakerOn;
-    });
-    
-    showToast(isLiveSpeakerOn ? "Voices Active 🔊" : "All Voices Muted 🔇");
+async function toggleLiveMic() {
+    const btn = document.getElementById('liveMicBtn');
+    if (!myPeer) initLiveVoiceSystem();
+
+    if (!isLiveMicOn) {
+        try {
+            const audioConstraints = {
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                },
+                video: false
+            };
+
+            localStream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+            isLiveMicOn = true;
+            btn.innerText = "🎙️ On Live";
+            btn.classList.add('live-mic-active');
+
+            if (window.roomChannel) {
+                const presenceState = roomChannel.presenceState();
+                Object.values(presenceState).forEach(presencePres => {
+                    presencePres.forEach(user => {
+                        const otherPeerId = 'eternal-' + btoa(unescape(encodeURIComponent(user.name))).replace(/=/g, '').substr(0, 15);
+                        if (myPeer && otherPeerId !== myPeer.id && !connectedPeers[otherPeerId]) {
+                            const call = myPeer.call(otherPeerId, localStream);
+                            handleIncomingStream(call);
+                        }
+                    });
+                });
+            }
+            
+            // حل بديل ذكي وآمن لا يعتمد على دالة خارجية لمنع ظهور الـ ReferenceError
+            if (typeof showToast === "function") {
+                showToast("Microphone Connected Live! ⚽");
+            } else {
+                console.log("Microphone Connected Live! ⚽");
+            }
+            
+        } catch (err) {
+            console.error("Mic error:", err);
+            alert("🔒 حظر من نظام الجهاز: " + err.name + " - " + err.message);
+        }
+    } else {
+        if (localStream) localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+        isLiveMicOn = false;
+        btn.innerText = "🎙️ Off";
+        btn.classList.remove('live-mic-active');
+        Object.values(connectedPeers).forEach(call => call.close());
+        
+        // حل بديل آمن عند الكتم أيضاً
+        if (typeof showToast === "function") {
+            showToast("Live Microphone Muted 🔒");
+        } else {
+            console.log("Live Microphone Muted 🔒");
+        }
+    }
 }
-
-// ربط تشغيل محرك الاتصال الصوتي تلقائياً فور تهيئة ميزة الـ Realtime
-const originalSetupRealtime = setupRealtime;
-setupRealtime = function() {
-    if (typeof originalSetupRealtime === "function") originalSetupRealtime();
-    setTimeout(initLiveVoiceSystem, 2500); // مهلة تأخير بسيطة لضمان استقرار الشبكة
-};
-
 
 </script>
 
@@ -5267,4 +5304,4 @@ setupRealtime = function() {
 
 
 </body>
-    </html>i
+    </html>
