@@ -11,6 +11,41 @@
 <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 
 <style>
+
+/* حاوية البروفايل داخل شريط المكالمة */
+.call-member-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 4px 10px;
+    border-radius: 20px;
+    flex-shrink: 0;
+}
+
+/* محرك مؤشر الذبذبات المتطاول النحيف */
+.voice-visualizer-bar {
+    width: 4px;
+    height: 30px;
+    background: #3a3b3c;
+    border-radius: 2px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: flex-end;
+}
+
+/* الجزء الداخلي الملون الذي يرتفع وينزل مع تيار الصوت */
+.voice-visualizer-fill {
+    width: 100%;
+    height: 0%; /* يبدأ من الصفر عند السكوت */
+    background: linear-gradient(to top, #00e676, #b8860b);
+    border-radius: 2px;
+    transition: height 0.1s ease; /* يعطي مرونة وسلاسة أثناء الارتفاع والنزول */
+}
+
+
+
 /* شريط الاتصال المباشر على مقاس الشات */
 .voice-call-bar {
     background: linear-gradient(135deg, #1e1e1e, #2d1b4e);
@@ -5080,17 +5115,28 @@ function formatMomentContent(text) {
 // ========================================================
 // --- نظام شريط الاتصال الصوتي الذكي (Messenger Voice Bar) ---
 // ========================================================
+// ========================================================
+// --- نظام شريط الاتصال الصوتي الذكي (Messenger Voice Bar) ---
+// ========================================================
+// ========================================================
+// --- نظام شريط الاتصال الصوتي الذكي (Messenger Voice Bar) ---
+// ========================================================
+// ========================================================
+// --- نظام شريط الاتصال الصوتي الذكي (Messenger Voice Bar) ---
+// ========================================================
 let myPeer = null;
 let localStream = null;
 let isLiveMicOn = false;
 let isLiveSpeakerOn = true;
 const connectedPeers = {};
+const activeCallUsers = {}; // مستودع لايف لتخزين بيانات بروفايلات الأشخاص المتواجدين بالخط حالياً
 
 // تهيئة الاتصال الصوتي وتوليد الرمز التعريفي الفريد للاعب
 function initLiveVoiceSystem() {
     const myName = localStorage.getItem('chat_username');
     if (!myName) return;
     
+    // توليد ID موحد وخالي من المشاكل
     const peerId = 'eternal-' + btoa(unescape(encodeURIComponent(myName))).replace(/=/g, '').substr(0, 15);
     
     myPeer = new Peer(peerId, {
@@ -5100,158 +5146,212 @@ function initLiveVoiceSystem() {
         debug: 1
     });
 
+    // الاستماع للمكالمات الصوتية القادمة
     myPeer.on('call', (call) => {
-        if (isLiveSpeakerOn) {
-            call.answer(localStream || new MediaStream());
-            handleIncomingStream(call);
-            // بث فوري لإشعار جهاز المرسل بوجودك في الخط ليظهر لديه البروفايل مباشرة
-            broadcastVoicePresence(isLiveMicOn);
-        } else {
-            call.close();
-        }
+        // الرد بالبث الخاص بنا (سواء كان مايك مفتوح أو قناة صامتة لضمان ربط الشبكة)
+        call.answer(localStream || new MediaStream());
+        
+        call.on('stream', (remoteStream) => {
+            handleRemoteAudioStream(call.peer, remoteStream);
+        });
     });
 }
 
-function handleIncomingStream(call) {
-    call.on('stream', (remoteStream) => {
-        if (document.getElementById(`audio-${call.peer}`)) return;
-        
-        const audio = document.createElement('audio');
-        audio.id = `audio-${call.peer}`;
-        audio.srcObject = remoteStream;
-        audio.autoplay = true;
-        audio.style.display = 'none';
-        audio.muted = !isLiveSpeakerOn;
-        
+// معالجة تيار الصوت القادم وتشغيله بالخلفية وربطه بمحلل الصوت المرئي
+function handleRemoteAudioStream(peerId, remoteStream) {
+    let audio = document.getElementById(`audio-${peerId}`);
+    if (!audio) {
+        audio = document.createElement('audio');
+        audio.id = `audio-${peerId}`;
         document.body.appendChild(audio);
-        connectedPeers[call.peer] = call;
-        
-        // رندر فوري ولايف لصورة اللاعب الجديد عند بدء تدفق الصوت
-        updateVoiceBarUI();
-    });
-
-    call.on('close', () => {
-        const audio = document.getElementById(`audio-${call.peer}`);
-        if (audio) audio.remove();
-        delete connectedPeers[call.peer];
-        updateVoiceBarUI();
-    });
+    }
+    audio.srcObject = remoteStream;
+    audio.autoplay = true;
+    audio.style.display = 'none';
+    audio.muted = !isLiveSpeakerOn;
+    
+    // ربط صوت هذا اللاعب بالمؤشر الرأسي النحيف الخاص به تلقائياً
+    attachVoiceAnalyzer(peerId, remoteStream);
+    
+    // تحديث فوري لواجهة الشريط الصوتي
+    updateVoiceBarUI();
 }
 
-// دالة التبديل الكبرى عند النقر على علامة التلفون (📞)
+// محرك التحليل الرياضي والترددي لتيار الصوت (Audio Volume Visualizer)
+function attachVoiceAnalyzer(peerId, stream) {
+    try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        
+        analyser.fftSize = 32; // عينة صغيرة جداً لضمان استجابة سريعة على الآيباد وبدون أي لاغ
+        source.connect(analyser);
+        
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        
+        function doVisualize() {
+            // التحقق من بقاء عنصر الـ Fill الملون في شاشة العرض
+            const fillElement = document.getElementById(`visualizer-${peerId}`);
+            if (!fillElement) return; // إيقاف الحلقة فوراً عند خروج اللاعب وتنظيف الغرفة
+            
+            analyser.getByteFrequencyData(dataArray);
+            
+            let total = 0;
+            for (let i = 0; i < bufferLength; i++) {
+                total += dataArray[i];
+            }
+            const average = total / bufferLength;
+            
+            // تحويل طاقة الموجات إلى نسبة مئوية لرفع وخفض الانيميشن كولار للاعلا
+            let heightPercent = Math.min(100, Math.floor((average / 110) * 100));
+            
+            // إلغاء الاهتزازات الطفيفة جداً لمنع الوميض عند السكوت التام
+            if (heightPercent < 10) heightPercent = 0;
+            
+            fillElement.style.height = heightPercent + '%';
+            
+            requestAnimationFrame(doVisualize);
+        }
+        
+        doVisualize();
+    } catch (e) {
+        console.log("Visualizer connection skipped: ", e);
+    }
+}
+
+// دالة التبديل الكبرى عند النقر على علامة التلفون (📞) - نسخة البرودكاست المباشر
 async function toggleVoiceCall() {
     const btn = document.getElementById('callToggleBtn');
     if (!myPeer) initLiveVoiceSystem();
 
+    const myName = localStorage.getItem('chat_username');
+    const myAvatar = localStorage.getItem('user_avatar') || 'https://www.w3schools.com/howto/img_avatar.png';
+
     if (!isLiveMicOn) {
         try {
-            const audioConstraints = {
+            // 1. فتح المايكروفون أولاً والتأكد من جاهزيته قبل بدء أي اتصال
+            localStream = await navigator.mediaDevices.getUserMedia({
                 audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
                 video: false
-            };
-
-            localStream = await navigator.mediaDevices.getUserMedia(audioConstraints);
-            isLiveMicOn = true;
+            });
             
+            isLiveMicOn = true;
             btn.innerText = "❌";
             btn.className = "call-btn btn-leave";
 
+            // 2. إرسال إشارة برودكاست حية وفورية للجميع: "أنا دخلت المكالمة، تفضلوا بروفايلي واتصلوا بي"
+            broadcastVoicePresence(true);
+            
+            // إضافة نفسك للمستودع المحلي فوراً للعرض اللحظي بدون تأخير
+            activeCallUsers[myPeer.id] = { name: myName, avatar: myAvatar };
+            updateVoiceBarUI();
+            
+            // ربط مايكروفونك الشخصي فوراً بالمؤشر المرئي الخاص بك لترى ذبذبات كلامك لايف
+            attachVoiceAnalyzer(myPeer.id, localStream);
+            
+            // 3. الاتصال التلقائي بجميع الأشخاص الموجودين حالياً في المكالمة
             if (window.roomChannel) {
                 const presenceState = roomChannel.presenceState();
                 Object.values(presenceState).forEach(presencePres => {
                     presencePres.forEach(user => {
-                        const otherPeerId = 'eternal-' + btoa(unescape(encodeURIComponent(user.name || user.username))).replace(/=/g, '').substr(0, 15);
-                        if (myPeer && otherPeerId !== myPeer.id && !connectedPeers[otherPeerId]) {
-                            const call = myPeer.call(otherPeerId, localStream);
-                            handleIncomingStream(call);
+                        const targetName = user.name || user.username;
+                        if (targetName && targetName !== myName) {
+                            const otherPeerId = 'eternal-' + btoa(unescape(encodeURIComponent(targetName))).replace(/=/g, '').substr(0, 15);
+                            
+                            // نطلب الاتصال بأجهزتهم مباشرة
+                            if (myPeer && !connectedPeers[otherPeerId]) {
+                                const call = myPeer.call(otherPeerId, localStream);
+                                connectedPeers[otherPeerId] = call;
+                                
+                                call.on('stream', (remoteStream) => {
+                                    handleRemoteAudioStream(otherPeerId, remoteStream);
+                                });
+                            }
                         }
                     });
                 });
             }
             
-            // تحديث حالتك وإخطار كافة الأجهزة المتصلة بالبث الصوتي فوراً بالصورة الحقيقية المختارة
-            if (typeof syncUserPresence === "function") {
-                await syncUserPresence(true);
-            }
-            broadcastVoicePresence(true);
-            updateVoiceBarUI();
-            
         } catch (err) {
-            console.error("Mic error:", err);
-            alert("🔒 Access Denied: Please verify microphone site permissions.");
+            console.error("Mic access failed:", err);
+            alert("🔒 فشل فتح المايك: تأكد من إعطاء صلاحية السماح (Allow) للمايكروفون في المتصفح.");
         }
     } else {
-        if (localStream) localStream.getTracks().forEach(track => track.stop());
+        // الخروج من المكالمة وتنظيف القنوات
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+        }
         localStream = null;
         isLiveMicOn = false;
         
         btn.innerText = "📞";
         btn.className = "call-btn btn-join";
         
-        Object.values(connectedPeers).forEach(call => call.close());
+        // إغلاق كافة المكالمات النشطة بالخلفية
+        Object.keys(connectedPeers).forEach(peerId => {
+            if (connectedPeers[peerId]) connectedPeers[peerId].close();
+            delete connectedPeers[peerId];
+        });
+        
+        // إزالة عناصر الصوت وتنظيف الذاكرة
+        document.querySelectorAll('audio[id^="audio-eternal-"]').forEach(audio => audio.remove());
+        
+        const myPeerId = myPeer ? myPeer.id : '';
+        delete activeCallUsers[myPeerId];
+        
         broadcastVoicePresence(false);
         updateVoiceBarUI();
     }
 }
 
-// بث تحديث لحظي قوي لجميع المتصفحات المفتوحة حالياً لإجبار الشريط على الرسم اللايف
-async function broadcastVoicePresence(inCall = false) {
+// بث إشارة المزامنة اللحظية الشاملة لجميع المتصفحات النشطة بالشبكة
+function broadcastVoicePresence(inCall = false) {
     const myName = localStorage.getItem('chat_username');
     const myAvatar = localStorage.getItem('user_avatar') || 'https://www.w3schools.com/howto/img_avatar.png';
-    if (!myName || !window.roomChannel) return;
+    if (!myName || !window.roomChannel || !myPeer) return;
     
     roomChannel.send({
         type: 'broadcast',
         event: 'voice_bar_sync',
-        payload: { name: myName, username: myName, inCall: inCall, avatar: myAvatar, avatar_url: myAvatar }
+        payload: { 
+            peerId: myPeer.id,
+            name: myName, 
+            avatar: myAvatar, 
+            inCall: inCall 
+        }
     });
 }
 
-// رندر واجهة صور الحسابات الحقيقية والملونة لحظة بلحظة وبشكل مباشر
-async function updateVoiceBarUI() {
+// دالة الرندر الصارمة والمستقلة لعرض الأسماء والصور الحقيقية مع مؤشر الصوت المتطاول بجانبها
+function updateVoiceBarUI() {
     const container = document.getElementById('callMembersList');
     const placeholder = document.getElementById('callPlaceholderStatus');
     if (!container) return;
 
-    const myName = localStorage.getItem('chat_username');
     let html = '';
 
-    // 1. إضافة صورتك الشخصية فوراً وبأعلى دقة إذا كنت متصلاً
-    if (isLiveMicOn) {
-        const myAvatar = localStorage.getItem('user_avatar') || 'https://www.w3schools.com/howto/img_avatar.png';
-        html += `
-            <div class="call-member-avatar" title="${myName} (You)">
-                <img src="${myAvatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; border: 2px solid #00e676; box-shadow: 0 0 8px rgba(0, 230, 118, 0.6);">
-                <span class="call-member-name">YOU</span>
-            </div>`;
-    }
-
-    // 2. سحب ومطابقة بقية الإخوة المتصلين صوتياً بالخلفية بدقة لايف
-    if (window.roomChannel) {
-        const audioElements = document.querySelectorAll('audio[id^="audio-eternal-"]');
-        const presenceState = roomChannel.presenceState();
+    // المرور على كافة البروفايلات المتواجدة في مستودع المكالمة النشط
+    Object.keys(activeCallUsers).forEach(peerId => {
+        const user = activeCallUsers[peerId];
+        const isMe = myPeer && (peerId === myPeer.id);
         
-        audioElements.forEach(audio => {
-            const peerId = audio.id.replace('audio-', '');
-            
-            Object.values(presenceState).forEach(presencePres => {
-                presencePres.forEach(user => {
-                    const checkId = 'eternal-' + btoa(unescape(encodeURIComponent(user.name || user.username))).replace(/=/g, '').substr(0, 15);
-                    
-                    if (peerId === checkId) {
-                        const userAvatar = user.avatar_url || user.avatar || 'https://www.w3schools.com/howto/img_avatar.png';
-                        const displayName = (user.name || user.username || "Brother").split(' ')[0].toUpperCase();
+        const displayName = isMe ? "YOU" : user.name.split(' ')[0].toUpperCase();
+        const borderStyle = isMe ? "border: 2px solid #00e676; box-shadow: 0 0 10px #00e676;" : "border: 2px solid #9c27b0; box-shadow: 0 0 8px rgba(156,39,176,0.5);";
 
-                        html += `
-                            <div class="call-member-avatar" title="${user.name || user.username}">
-                                <img src="${userAvatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; border: 2px solid #00e676; box-shadow: 0 0 8px rgba(0, 230, 118, 0.5);">
-                                <span class="call-member-name">${displayName}</span>
-                            </div>`;
-                    }
-                });
-            });
-        });
-    }
+        // بناء الحاوية التي تجمع (الدائرة والصورة والاسم) + (مؤشر الصوت المتطاول والنحيف بجانبها مباشرة)
+        html += `
+            <div class="call-member-wrapper" id="wrapper-${peerId}" style="display: flex; align-items: center; gap: 6px; background: rgba(255, 255, 255, 0.05); padding: 4px 8px; border-radius: 20px; flex-shrink: 0; margin-right: 10px;">
+                <div class="call-member-avatar" id="view-${peerId}" title="${user.name}" style="position: relative; width: 38px; height: 38px; flex-shrink: 0;">
+                    <img src="${user.avatar}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; ${borderStyle}">
+                    <span class="call-member-name" style="position: absolute; bottom: -3px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; font-size: 7px; padding: 1px 4px; border-radius: 4px; white-space: nowrap; font-weight: bold; font-family: 'Cairo', sans-serif;">${displayName}</span>
+                </div>
+                <div class="voice-visualizer-bar" style="width: 4px; height: 26px; background: rgba(255,255,255,0.1); border-radius: 2px; position: relative; overflow: hidden; display: flex; align-items: flex-end;">
+                    <div class="voice-visualizer-fill" id="visualizer-${peerId}" style="width: 100%; height: 0%; background: linear-gradient(to top, #00e676, #ffeb3b); border-radius: 2px; transition: height 0.08s ease;"></div>
+                </div>
+            </div>`;
+    });
 
     if (html !== '') {
         if (placeholder) placeholder.style.display = 'none';
@@ -5265,19 +5365,15 @@ function toggleLiveSpeaker() {
     const btn = document.getElementById('callSpeakerBtn');
     isLiveSpeakerOn = !isLiveSpeakerOn;
     
-    if (isLiveSpeakerOn) {
-        btn.innerText = "🔊";
-        btn.className = "call-btn btn-speaker-on";
-        document.querySelectorAll('audio[id^="audio-eternal-"]').forEach(audio => audio.muted = false);
-    } else {
-        btn.innerText = "🔇";
-        btn.className = "call-btn btn-speaker-off";
-        document.querySelectorAll('audio[id^="audio-eternal-"]').forEach(audio => audio.muted = true);
-    }
-    updateVoiceBarUI();
+    btn.innerText = isLiveSpeakerOn ? "🔊" : "🔇";
+    btn.className = isLiveSpeakerOn ? "call-btn btn-speaker-on" : "call-btn btn-speaker-off";
+    
+    document.querySelectorAll('audio[id^="audio-eternal-"]').forEach(audio => {
+        audio.muted = !isLiveSpeakerOn;
+    });
 }
 
-// دمج المزامنة اللحظية الحية الفورية للشريط مع مستمعي أحداث السيرفر (لايف 100%)
+// دمج نظام الرصد اللحظي مع محرك السيرفر الأساسي لمنع مشاكل الـ Sync
 const originalSetupRealtime = setupRealtime;
 setupRealtime = function() {
     if (typeof originalSetupRealtime === "function") originalSetupRealtime();
@@ -5286,18 +5382,43 @@ setupRealtime = function() {
         initLiveVoiceSystem();
         
         if (window.roomChannel) {
-            // الاستماع الفوري والإلزامي لبرودكاست الصوت لإعادة رندر الشريط بدون أي تأخير
-            roomChannel.on('broadcast', { event: 'voice_bar_sync' }, () => {
+            // الاستماع الفوري والذكي لإشارات البرودكاست الحية (سر الحل اللحظي الفوري للصور والصوت)
+            roomChannel.on('broadcast', { event: 'voice_bar_sync' }, (payload) => {
+                const data = payload.payload;
+                
+                if (data.inCall) {
+                    // إذا دخل شخص ما المكالمة، نقوم بحفظ بروفايله الحقيقي فوراً ورسمه بالشريط
+                    activeCallUsers[data.peerId] = { name: data.name, avatar: data.avatar };
+                    
+                    // إذا كنا نحن أيضاً في المكالمة، نتصل بجهازه تلقائياً لفتح الصوت الثنائي
+                    if (isLiveMicOn && myPeer && data.peerId !== myPeer.id && !connectedPeers[data.peerId]) {
+                        const call = myPeer.call(data.peerId, localStream);
+                        connectedPeers[data.peerId] = call;
+                        
+                        call.on('stream', (remoteStream) => {
+                            handleRemoteAudioStream(data.peerId, remoteStream);
+                        });
+                    }
+                } else {
+                    // إذا خرج، نمسحه من الشريط فوراً
+                    delete activeCallUsers[data.peerId];
+                    const audio = document.getElementById(`audio-${data.peerId}`);
+                    if (audio) audio.remove();
+                    if (connectedPeers[data.peerId]) delete connectedPeers[data.peerId];
+                }
+                
+                // رندر فوري مباشر للأسماء والدوائر
                 updateVoiceBarUI();
             });
 
-            // تحديث فوري فائق السرعة عند حدوث join أو leave للـ Presence العام لضمان مزامنة خروج ودخول اللاعبين مباشرة
-            roomChannel.on('presence', { event: 'sync' }, () => {
-                updateVoiceBarUI();
+            // عند انضمام أي لاعب جديد للمنصة، نرسل له حالتنا الصوتية الحالية تلقائياً لكي يرى الشريط محدثاً
+            roomChannel.on('presence', { event: 'join' }, () => {
+                if (isLiveMicOn) broadcastVoicePresence(true);
             });
         }
     }, 2500);
 };
+
 
 
 
