@@ -5231,80 +5231,69 @@ async function toggleVoiceCall() {
 
     if (!isLiveMicOn) {
         try {
-            // 1. فتح المايكروفون أولاً والتأكد من جاهزيته قبل بدء أي اتصال
+            // المحاولة الأولى: طلب المايك بالإعدادات الاحترافية لسماعة الجيمنج
             localStream = await navigator.mediaDevices.getUserMedia({
                 audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
                 video: false
             });
-            
-            isLiveMicOn = true;
-            btn.innerText = "❌";
-            btn.className = "call-btn btn-leave";
-
-            // 2. إرسال إشارة برودكاست حية وفورية للجميع: "أنا دخلت المكالمة، تفضلوا بروفايلي واتصلوا بي"
-            broadcastVoicePresence(true);
-            
-            // إضافة نفسك للمستودع المحلي فوراً للعرض اللحظي بدون تأخير
-            activeCallUsers[myPeer.id] = { name: myName, avatar: myAvatar };
-            updateVoiceBarUI();
-            
-            // ربط مايكروفونك الشخصي فوراً بالمؤشر المرئي الخاص بك لترى ذبذبات كلامك لايف
-            attachVoiceAnalyzer(myPeer.id, localStream);
-            
-            // 3. الاتصال التلقائي بجميع الأشخاص الموجودين حالياً في المكالمة
-            if (window.roomChannel) {
-                const presenceState = roomChannel.presenceState();
-                Object.values(presenceState).forEach(presencePres => {
-                    presencePres.forEach(user => {
-                        const targetName = user.name || user.username;
-                        if (targetName && targetName !== myName) {
-                            const otherPeerId = 'eternal-' + btoa(unescape(encodeURIComponent(targetName))).replace(/=/g, '').substr(0, 15);
-                            
-                            // نطلب الاتصال بأجهزتهم مباشرة
-                            if (myPeer && !connectedPeers[otherPeerId]) {
-                                const call = myPeer.call(otherPeerId, localStream);
-                                connectedPeers[otherPeerId] = call;
-                                
-                                call.on('stream', (remoteStream) => {
-                                    handleRemoteAudioStream(otherPeerId, remoteStream);
-                                });
-                            }
-                        }
-                    });
-                });
+        } catch (firstErr) {
+            console.log("الخيار الاحترافي فشل، يتم الانتقال للمحرك الأساسي المباشر...");
+            try {
+                // المحاولة الثانية (الطوارئ): طلب المايكروفون بشكل خام وبسيط جداً لتخطي حظر النظام
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            } catch (secondErr) {
+                console.error("Mic access completely failed:", secondErr);
+                alert("🔒 حظر من نظام الجهاز: يرجى إغلاق الألعاب أو ديسكورد من الخلفية ثم أعد محاولة التوصيل.");
+                return;
             }
-            
-        } catch (err) {
-            console.error("Mic access failed:", err);
-            alert("🔒 فشل فتح المايك: تأكد من إعطاء صلاحية السماح (Allow) للمايكروفون في المتصفح.");
+        }
+
+        // إذا نجح فتح المايك في أي من المحاولتين، يتم تشغيل المنظومة فوراً
+        isLiveMicOn = true;
+        btn.innerText = "❌";
+        btn.className = "call-btn btn-leave";
+
+        broadcastVoicePresence(true);
+        activeCallUsers[myPeer.id] = { name: myName, avatar: myAvatar };
+        updateVoiceBarUI();
+        attachVoiceAnalyzer(myPeer.id, localStream);
+
+        if (window.roomChannel) {
+            const presenceState = roomChannel.presenceState();
+            Object.values(presenceState).forEach(presencePres => {
+                presencePres.forEach(user => {
+                    const targetName = user.name || user.username;
+                    if (targetName && targetName !== myName) {
+                        const otherPeerId = 'eternal-' + btoa(unescape(encodeURIComponent(targetName))).replace(/=/g, '').substr(0, 15);
+                        if (myPeer && !connectedPeers[otherPeerId]) {
+                            const call = myPeer.call(otherPeerId, localStream);
+                            connectedPeers[otherPeerId] = call;
+                            call.on('stream', (remoteStream) => {
+                                handleRemoteAudioStream(otherPeerId, remoteStream);
+                            });
+                        }
+                    }
+                });
+            });
         }
     } else {
-        // الخروج من المكالمة وتنظيف القنوات
-        if (localStream) {
-            localStream.getTracks().forEach(track => track.stop());
-        }
+        // كود الخروج الآمن كما هو بدون تغيير
+        if (localStream) localStream.getTracks().forEach(track => track.stop());
         localStream = null;
         isLiveMicOn = false;
-        
         btn.innerText = "📞";
         btn.className = "call-btn btn-join";
-        
-        // إغلاق كافة المكالمات النشطة بالخلفية
         Object.keys(connectedPeers).forEach(peerId => {
             if (connectedPeers[peerId]) connectedPeers[peerId].close();
             delete connectedPeers[peerId];
         });
-        
-        // إزالة عناصر الصوت وتنظيف الذاكرة
         document.querySelectorAll('audio[id^="audio-eternal-"]').forEach(audio => audio.remove());
-        
-        const myPeerId = myPeer ? myPeer.id : '';
-        delete activeCallUsers[myPeerId];
-        
+        if (myPeer) delete activeCallUsers[myPeer.id];
         broadcastVoicePresence(false);
         updateVoiceBarUI();
     }
 }
+
 
 // بث إشارة المزامنة اللحظية الشاملة لجميع المتصفحات النشطة بالشبكة
 function broadcastVoicePresence(inCall = false) {
