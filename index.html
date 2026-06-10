@@ -1193,22 +1193,6 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
 
 </div><!-- === غرفة الدردشة السرية الخاصة === --><div id="private-chat-interface">
 
-<!-- شريط الاتصال والمكالمة الحية الجديد (نمط الماسنجر والواتساب) -->
-<div class="voice-call-bar">
-    <!-- الجانب الأيسر: صور الحسابات المتصلة بالصوت حالياً -->
-    <div class="call-members-container" id="callMembersList">
-        <span id="callPlaceholderStatus" style="color: #888; font-size: 12px;">No active live call. Tap 📞 to start/join.</span>
-    </div>
-    
-    <!-- الجانب الأيمن: أزرار التحكم السريعة (الاتصال وكتم السماعة) -->
-    <div class="call-controls">
-        <!-- زر التبديل العام للسماعة -->
-        <button id="callSpeakerBtn" class="call-btn btn-speaker-on" onclick="toggleLiveSpeaker()" title="Mute/Unmute Room Voices">🔊</button>
-        <!-- زر الجوين واللوج أوت (أيقونة الهاتف) -->
-        <button id="callToggleBtn" class="call-btn btn-join" onclick="toggleVoiceCall()" title="Join Live Call">📞</button>
-    </div>
-</div>
-
 
     <div class="online-users-bar" id="online-users-list-private">
 
@@ -1228,6 +1212,23 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
 
 <div>
 
+<!-- شريط الاتصال والمكالمة الحية الجديد (نمط الماسنجر والواتساب) -->
+<div class="voice-call-bar">
+    <!-- الجانب الأيسر: صور الحسابات المتصلة بالصوت حالياً -->
+    <div class="call-members-container" id="callMembersList">
+        <span id="callPlaceholderStatus" style="color: #888; font-size: 12px;">No active live call. Tap 📞 to start/join.</span>
+    </div>
+    
+    <!-- الجانب الأيمن: أزرار التحكم السريعة (الاتصال وكتم السماعة) -->
+    <div class="call-controls">
+        <!-- زر التبديل العام للسماعة -->
+        <button id="callSpeakerBtn" class="call-btn btn-speaker-on" onclick="toggleLiveSpeaker()" title="Mute/Unmute Room Voices">🔊</button>
+        <!-- زر الجوين واللوج أوت (أيقونة الهاتف) -->
+        <button id="callToggleBtn" class="call-btn btn-join" onclick="toggleVoiceCall()" title="Join Live Call">📞</button>
+    </div>
+</div>
+
+
 
     <button class="tool-btn" onclick="openVisitorLog()" title="سجل الزوار">🕒</button>
     
@@ -1237,6 +1238,8 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
     <button class="tool-btn" onclick="checkSettingsAccess()">⚙️</button>
     <button class="tool-btn" onclick="exitChat()">✖</button>
 </div>
+
+
  
 
 <div class="chat-box" id="private-chat-box">
@@ -1248,6 +1251,7 @@ body { background-color: var(--bg-dark); color: var(--text-light); overflow-x: h
     </div>
 
 </div>
+
 
 
 
@@ -3009,12 +3013,45 @@ function startInactivityTimer() {
 }
 
 // دالة إعادة ضبط العداد عند الحركة (تعمل محلياً 100%)
+// دالة إعادة ضبط العداد الذكية لحماية الاتصال، التسجيل، الاستماع، ومشاهدة الفيديوهات واليوتيوب
 function resetInactivityTimer() { 
     if (!appSettings.inactivityEnabled || !username) return;
     clearTimeout(inactivityTimer); 
     
     inactivityTimer = setTimeout(() => {
+        // --- [ حصن الأمان الذكي لمنع الفصل ] ---
+        
+        // 1. التحقق إذا كان المستخدم داخل مكالمة صوتية نشطة
+        const isCurrentlyInCall = (isLiveMicOn === true);
+
+        // 2. التحقق إذا كان جاري تسجيل صوت حالياً
+        const isCurrentlyRecording = (isRecording === true);
+
+        // 3. التحقق إذا كان المستخدم يستمع لرسالة صوتية، راديو، أو فيديو عادي نشط
+        let isCurrentlyListeningOrWatching = false;
+        document.querySelectorAll('audio, video').forEach(media => {
+            if (!media.paused && media.currentTime > 0 && !media.muted) {
+                isCurrentlyListeningOrWatching = true; 
+            }
+        });
+
+        // 4. التحقق إذا كان المستخدم يشاهد فيديو يوتيوب مضمن (فحص حالة الـ iFrame النشط)
+        // بما أن اليوتيوب يعمل داخل iFrame منفصل، نتحقق برمجياً من حركة التركيز أو وجود تفاعل نشط مع حاوية الفيديو
+        const activeElement = document.activeElement;
+        if (activeElement && activeElement.tagName === 'IFRAME' && activeElement.src.includes('youtube.com')) {
+            isCurrentlyListeningOrWatching = true;
+        }
+
+        // إذا تحقق أي شرط من شروط النشاط الحيوي، يتم تمديد الجلسة فوراً وتصفير العداد
+        if (isCurrentlyInCall || isCurrentlyRecording || isCurrentlyListeningOrWatching) {
+            console.log("🔒 تم تأمين الجلسة: يوجد اتصال، تسجيل، أو ميديا (فيديو/يوتيوب) تعمل حالياً.");
+            resetInactivityTimer(); // إعادة تدوير العداد لفترة جديدة
+            return;
+        }
+
+        // إذا انعدمت كل الأنشطة، يتم تنفيذ الخروج الآمن
         executeSmartExit();
+
     }, appSettings.inactivityTimeout * 1000); 
 }
 
@@ -5378,6 +5415,30 @@ function hookVoiceRealtimeEvents() {
     }
 }
 
+// مستمع ذكي لمراقبة تشغيل الفيديوهات العادية، الفيديوهات المرفوعة، والرسائل الصوتية
+document.addEventListener('play', function(e) {
+    if (e.target.tagName === 'AUDIO' || e.target.tagName === 'VIDEO') {
+        resetInactivityTimer(); // تصفير فوري عند بدء التشغيل
+        
+        // تحديث مستمر تلقائي طالما الميديا تعمل ولم تتوقف
+        const intervalCheck = setInterval(() => {
+            if (e.target.paused || e.target.ended) {
+                clearInterval(intervalCheck);
+            } else {
+                resetInactivityTimer();
+            }
+        }, 3000); // تحديث العداد كل 3 ثوانٍ
+    }
+}, true);
+
+// مستشعر ذكي خاص بفيديوهات اليوتيوب (iFrames) داخل الشات واليوميات
+// يضمن استمرار تصفير العداد طالما أن المستخدم قام بالنقر على إطار اليوتيوب ويشاهد مقطع الفيديو
+setInterval(function() {
+    const activeEl = document.activeElement;
+    if (activeEl && activeEl.tagName === 'IFRAME' && (activeEl.src.includes('youtube.com') || activeEl.src.includes('youtu.be'))) {
+        resetInactivityTimer(); // تصفير العداد تلقائياً طالما الفوكس على فيديو اليوتيوب
+    }
+}, 3000); // يفحص التركيز كل 3 ثوانٍ لتأمين الجلسة أثناء المشاهدة الطويلة
 
 
 
